@@ -12,7 +12,7 @@ GitHub Actions builds and publishes
 `ghcr.io/alex1612356356/fdmedia-gallery:latest` to GitHub Container Registry
 (GHCR). The image is public, so TrueNAS can pull it without registry credentials.
 The current numbered release is
-`ghcr.io/alex1612356356/fdmedia-gallery:1.0.0`; use a numbered tag to pin an
+`ghcr.io/alex1612356356/fdmedia-gallery:v1.0.0`; use a numbered tag to pin an
 installation to a specific release. Every push to the default branch updates
 `latest`.
 
@@ -93,7 +93,7 @@ TrueNAS pool. Replace both secret placeholders with the generated values.
 ```yaml
 services:
   web:
-    image: ghcr.io/alex1612356356/fdmedia-gallery:1.0.0
+    image: ghcr.io/alex1612356356/fdmedia-gallery:v1.0.0
     restart: unless-stopped
     user: "568:568"
     init: true
@@ -119,7 +119,7 @@ services:
       start_period: 20s
 
   worker:
-    image: ghcr.io/alex1612356356/fdmedia-gallery:1.0.0
+    image: ghcr.io/alex1612356356/fdmedia-gallery:v1.0.0
     restart: unless-stopped
     user: "568:568"
     init: true
@@ -181,7 +181,7 @@ change into that folder. Create a private `.env` file:
 
 ```sh
 umask 077
-printf 'IMAGE=ghcr.io/alex1612356356/fdmedia-gallery:1.0.0\nGALLERY_SECRET=%s\nADMIN_PASSWORD=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
+printf 'IMAGE=ghcr.io/alex1612356356/fdmedia-gallery:v1.0.0\nGALLERY_SECRET=%s\nADMIN_PASSWORD=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
 ```
 
 Save the secret values securely. Edit `docker-compose.yml` and replace the
