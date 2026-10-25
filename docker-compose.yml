@@ -1,0 +1,42 @@
+# Run from the TrueNAS shell or use this Compose file in the TrueNAS Apps YAML editor.
+services:
+  web:
+    image: ${IMAGE:?Set IMAGE in the .env file}
+    restart: unless-stopped
+    user: "568:568"
+    init: true
+    environment:
+      SECRET: ${GALLERY_SECRET:?Set GALLERY_SECRET in the .env file}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in the .env file}
+      DATA: /data
+      CACHE: /cache
+      MEDIA: /media
+      PORT: "3000"
+      COOKIE_SECURE: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - /mnt/Apps/Site/clients/media:/media:rw
+      - /mnt/Apps/Site/apps/fdmedia-gallery/data:/data
+      - /mnt/Apps/Site/apps/fdmedia-gallery/cache:/cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+  worker:
+    image: ${IMAGE:?Set IMAGE in the .env file}
+    restart: unless-stopped
+    user: "568:568"
+    init: true
+    command: ["python", "worker.py"]
+    environment:
+      DATA: /data
+      CACHE: /cache
+      MEDIA: /media
+      INTERVAL: "30"
+    volumes:
+      - /mnt/Apps/Site/clients/media:/media:ro
+      - /mnt/Apps/Site/apps/fdmedia-gallery/data:/data
+      - /mnt/Apps/Site/apps/fdmedia-gallery/cache:/cache

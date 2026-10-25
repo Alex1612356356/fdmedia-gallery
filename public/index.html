@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#090909">
+<title>fdmedia.studio — Galerie</title>
+<link rel="stylesheet" href="/vendor/photoswipe.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="https://fdmedia.studio" aria-label="FD Media Studios — site principal">
+    <span class="brand-mark">FDM</span><span class="brand-caption">STUDIOS</span>
+  </a>
+  <nav class="actions" aria-label="Acțiuni galerie">
+    <button id="filterFav" class="action-btn" type="button" hidden aria-pressed="false">
+      <span class="action-icon" aria-hidden="true">♥</span><span>Favorite</span><b id="favCount">0</b>
+    </button>
+    <a id="dlAll" class="action-btn action-primary" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg>
+      <span>Descarcă galeria ZIP</span>
+    </a>
+  </nav>
+</header>
+<main>
+  <section class="hero" id="hero" hidden aria-labelledby="title">
+    <div class="hero-copy">
+      <p class="eyebrow"><span class="eyebrow-dot"></span> GALERIE PRIVATĂ <span class="eyebrow-divider">/</span> FOTO &amp; VIDEO</p>
+      <h1 id="title"></h1>
+      <p class="hero-note" id="description"></p>
+    </div>
+    <div class="hero-count" aria-live="polite">
+      <span class="count-number" id="countNumber">0</span>
+      <span class="count-label" id="countLabel">FOTOGRAFII</span>
+    </div>
+  </section>
+  <section class="gallery-section" aria-label="Fotografii și videoclipuri">
+    <div class="gallery-heading">
+      <span class="gallery-heading-title">POVEȘTILE VOASTRE</span>
+      <span class="gallery-heading-line"></span>
+      <span class="gallery-hint">Selectați o imagine pentru a o vizualiza</span>
+    </div>
+    <p id="galleryNotice" class="gallery-notice" role="status" aria-live="polite"></p>
+    <div id="grid" class="grid"></div>
+    <div id="emptyState" class="empty-state" hidden>
+      <span class="empty-icon" aria-hidden="true">✳</span>
+      <h2 id="emptyTitle">Galeria se pregătește</h2>
+      <p id="emptyMessage">Fotografiile vor apărea aici în curând.</p>
+    </div>
+  </section>
+</main>
+<div id="gate" class="gate">
+  <div class="gate-art" aria-hidden="true"></div>
+  <div class="gate-layout">
+    <a class="brand gate-brand" href="https://fdmedia.studio" aria-label="FD Media Studios — site principal">
+      <span class="brand-mark">FDM</span><span class="brand-caption">STUDIOS</span>
+    </a>
+    <form id="pinForm" class="gate-card">
+      <div class="lock-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></svg>
+      </div>
+      <p class="eyebrow gate-eyebrow">ACCES PRIVAT</p>
+      <h1>Bine ați venit.</h1>
+      <p class="gate-description">Introduceți codul PIN primit pentru a descoperi galeria voastră.</p>
+      <label class="pin-label" for="pin">CODUL PIN</label>
+      <div class="pin-wrap">
+        <input id="pin" type="password" inputmode="numeric" autocomplete="one-time-code" placeholder="Introduceți PIN-ul" aria-describedby="err" required>
+        <button id="togglePin" class="pin-toggle" type="button" aria-label="Afișează PIN-ul" aria-pressed="false">Afișează</button>
+      </div>
+      <button class="btn" id="loginButton" type="submit">
+        <span>Deschide galeria</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+      </button>
+      <p id="err" class="form-message" role="alert" aria-live="polite"></p>
+      <p class="privacy-note"><span aria-hidden="true">●</span> Galeria este vizibilă doar cu PIN-ul tău.</p>
+    </form>
+    <p class="gate-footer">CAPTURĂM EMOȚIA PURĂ <span>·</span> FOTO &amp; VIDEO DE EVENIMENT</p>
+  </div>
+</div>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

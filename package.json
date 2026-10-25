@@ -1,0 +1,9 @@
+{
+  "name": "fdmedia-gallery-static-vendor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Build-time source for the PhotoSwipe browser assets",
+  "dependencies": {
+    "photoswipe": "5.4.4"
+  }
+}

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#090909">
+<title>Administrare galerii — fdmedia.studio</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="admin-page">
+<header class="top">
+  <a class="brand" href="https://fdmedia.studio" aria-label="FD Media Studios — site principal">
+    <span class="brand-mark">FDM</span><span class="brand-caption">STUDIOS</span>
+  </a>
+  <a class="action-btn" href="/">Înapoi la site</a>
+</header>
+<main class="admin-main">
+  <section class="admin-intro">
+    <p class="eyebrow"><span class="eyebrow-dot"></span> FD MEDIA STUDIOS <span class="eyebrow-divider">/</span> PANOU PRIVAT</p>
+    <h1><span class="admin-title-line">Administrare</span><br>galerii.</h1>
+    <p>Creează galerii private și pregătește accesul pentru clienți.</p>
+  </section>
+  <section id="adminLogin" class="admin-panel">
+    <div class="lock-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></svg>
+    </div>
+    <h2>Acces administrator</h2>
+    <p>Introdu parola de administrare pentru a continua.</p>
+    <form id="adminLoginForm" class="admin-form">
+      <label class="pin-label" for="adminPassword">PAROLA DE ADMINISTRARE</label>
+      <input id="adminPassword" type="password" autocomplete="current-password" required>
+      <button id="adminLoginButton" class="btn" type="submit"><span>Autentificare</span></button>
+      <p id="adminLoginMessage" class="form-message" role="alert" aria-live="polite"></p>
+    </form>
+  </section>
+  <section id="adminDashboard" class="admin-dashboard" hidden>
+    <div class="admin-section-heading">
+      <div><p class="eyebrow">SPAȚIUL TĂU</p><h2>Galerii active</h2></div>
+      <button id="adminLogout" class="action-btn" type="button">Ieșire</button>
+    </div>
+    <div id="albumList" class="album-list" aria-live="polite"></div>
+    <section class="admin-panel create-panel">
+      <p class="eyebrow">O NOUĂ POVESTE</p>
+      <h2>Creează o galerie</h2>
+      <p>Folderul trebuie să existe deja în directorul foto partajat cu aplicația.</p>
+      <form id="createAlbumForm" class="admin-form">
+        <label class="pin-label" for="albumTitle">NUMELE AFIȘAT CLIENȚILOR</label>
+        <input id="albumTitle" name="title" maxlength="120" placeholder="Nuntă Ana & Mihai" required>
+        <label class="pin-label" for="albumSlug">LINKUL GALERIEI</label>
+        <div class="slug-field"><span>/g/</span><input id="albumSlug" name="slug" maxlength="63" pattern="[a-z0-9][a-z0-9-]{0,62}" placeholder="nunta-ana-mihai" required></div>
+        <p class="field-help">Folosește litere mici, cifre și cratime. Linkul va fi /g/identificator.</p>
+        <label class="pin-label" for="albumFolder">FOLDERUL FOTO (RELATIV LA /media)</label>
+        <input id="albumFolder" name="folder" placeholder="evenimente/nunta-ana-mihai" required>
+        <p class="field-help">Exemplu: dacă fotografiile sunt în /media/evenimente/nunta, scrie evenimente/nunta.</p>
+        <label class="pin-label" for="albumTheme">TEMA GALERIEI</label>
+        <select id="albumTheme" name="theme">
+          <option value="default">Implicită</option>
+          <option value="wedding">Nuntă</option>
+          <option value="baptism-boy">Botez băiat</option>
+          <option value="baptism-girl">Botez fată</option>
+          <option value="prom-boy">Majorat băiat</option>
+          <option value="prom-girl">Majorat fată</option>
+        </select>
+        <label class="pin-label" for="albumDescription">DESCRIEREA GALERIEI (OPȚIONALĂ)</label>
+        <textarea id="albumDescription" name="description" maxlength="500" rows="3" placeholder="Am păstrat aici momentele voastre. Bucurați-vă de ele."></textarea>
+        <p class="field-help">Dacă lași câmpul gol, se va afișa descrierea implicită.</p>
+        <label class="pin-label" for="albumPin">PIN PENTRU CLIENȚI</label>
+        <input id="albumPin" name="pin" type="password" inputmode="numeric" autocomplete="new-password" minlength="4" placeholder="Minimum 4 caractere" required>
+        <button id="createAlbumButton" class="btn" type="submit"><span>Creează galeria</span></button>
+        <p id="createAlbumMessage" class="form-message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </section>
+</main>
+<script type="module" src="/static/admin.js"></script>
+</body>
+</html>
