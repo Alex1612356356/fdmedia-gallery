@@ -206,6 +206,10 @@ def scan_album(slug, album):
                     "size": stat.st_size,
                 }
             )
+            write_json_atomic(
+                index_file,
+                {"updated": int(time.time() * 1000), "items": items},
+            )
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
             detail = getattr(exc, "stderr", None)
             if isinstance(detail, bytes):
