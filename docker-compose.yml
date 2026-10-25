@@ -14,7 +14,7 @@ services:
       PORT: "3000"
       COOKIE_SECURE: "true"
     ports:
-      - "3000:3000"
+      - "3050:3000"
     volumes:
       - /mnt/Apps/Site/clients/media:/media:rw
       - /mnt/Apps/Site/apps/fdmedia-gallery/data:/data

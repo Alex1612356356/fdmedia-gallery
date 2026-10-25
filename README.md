@@ -103,7 +103,7 @@ services:
       PORT: "3000"
       COOKIE_SECURE: "true"
     ports:
-      - "3000:3000"
+      - "3050:3000"
     volumes:
       - /mnt/POOL/photos:/media:rw
       - /mnt/POOL/apps/fdmedia-gallery/data:/data
@@ -152,8 +152,8 @@ Review the YAML and select **Install**. Wait for both `web` and `worker` to show
 as running. The image is public; no GitHub username or registry password is
 needed.
 
-Open `http://TRUENAS-IP:3000/healthz` from your local network. A healthy install
-returns `{"ok":true}`. Then open `http://TRUENAS-IP:3000/admin` and sign in with
+Open `http://TRUENAS-IP:3050/healthz` from your local network. A healthy install
+returns `{"ok":true}`. Then open `http://TRUENAS-IP:3050/admin` and sign in with
 the `ADMIN_PASSWORD` you configured. Create a gallery by entering its title,
 slug, existing photo subfolder relative to `/media`, client PIN, theme, and
 optional description.
@@ -161,7 +161,7 @@ optional description.
 For public access, configure a DNS hostname and HTTPS reverse proxy or
 Cloudflare Tunnel before sharing gallery links. The default setting
 `COOKIE_SECURE: "true"` requires HTTPS for browser login. Do not expose port
-3000 directly to the internet. For a temporary LAN-only test without HTTPS,
+3050 directly to the internet. For a temporary LAN-only test without HTTPS,
 you can set `COOKIE_SECURE: "false"` and recreate the app; change it back to
 `"true"` before exposing the site publicly.
 
@@ -234,7 +234,8 @@ internet-facing:
 COOKIE_SECURE: "false"
 ```
 
-Then visit `http://TRUE_NAS_LAN_IP:3000/admin`. Create an album by entering its
+Then visit `http://TRUE_NAS_LAN_IP:3050/admin` when using the TrueNAS Custom App
+configuration above. Create an album by entering its
 display title, URL slug, existing folder relative to `/media`, and the PIN
 clients will use. Choose one of the built-in themes (default, wedding, baptism
 boy/girl, or prom boy/girl) and optionally add a gallery description. Leaving
@@ -294,8 +295,9 @@ missing or unsupported.
 ## 6. Configure HTTPS and network access
 
 Configure a DNS hostname and HTTPS in a reverse proxy or Cloudflare Tunnel.
-Forward that hostname to `http://TRUE_NAS_LAN_IP:3000` (or the host port you
-selected). The browser-facing connection must be HTTPS because login cookies
+Forward that hostname to `http://TRUE_NAS_LAN_IP:3050` when using the TrueNAS
+Custom App configuration above (or to the host port you selected). The
+browser-facing connection must be HTTPS because login cookies
 are Secure and HttpOnly. Do not expose the app's HTTP port directly to the
 internet and do not configure a URL path prefix such as `/gallery`; the app is
 served at the domain root with gallery paths like `/g/<slug>`.
@@ -307,7 +309,8 @@ address. Only do this if direct public access to the app port is blocked; a
 client that can reach the app directly could otherwise forge forwarded headers.
 
 For private LAN-only testing, you may set `COOKIE_SECURE=false` and visit
-`http://TRUE_NAS_LAN_IP:3000/g/<slug>`. Do not use that setting for a
+`http://TRUE_NAS_LAN_IP:3050/g/<slug>` when using the TrueNAS Custom App
+configuration above. Do not use that setting for a
 public/internet-facing deployment.
 
 ## 7. Verify
