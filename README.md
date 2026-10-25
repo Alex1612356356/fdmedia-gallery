@@ -6,18 +6,12 @@ the Python service serves its static files and PhotoSwipe assets.
 
 ## Publish the Docker image to GitHub
 
-The GitHub Actions workflow in `.github/workflows/publish-image.yml` builds and
-publishes the image to GitHub Container Registry (GHCR) when code is pushed.
-Push this project to a GitHub repository, then open **Actions** and confirm the
-`Publish TrueNAS image` workflow succeeds. The image name is
-`ghcr.io/<owner>/<repository>`; use lowercase letters for the owner and
-repository in the image name.
-
-GHCR packages are private by default. On GitHub, open the repository's
-**Packages** page, select the image package, then use **Package settings** to
-change its visibility to **Public**. TrueNAS can then pull it without registry
-credentials. The default branch publishes the `latest` tag; pushing a version
-tag such as `v1.0.0` also publishes that version tag.
+The public source repository is
+[`Alex1612356356/fdmedia-gallery`](https://github.com/Alex1612356356/fdmedia-gallery).
+GitHub Actions builds and publishes
+`ghcr.io/alex1612356356/fdmedia-gallery:latest` to GitHub Container Registry
+(GHCR). The image is public, so TrueNAS can pull it without registry credentials.
+Every push to the default branch updates the `latest` image.
 
 ## What you need
 
@@ -41,7 +35,7 @@ dataset (or use the existing photo folder):
 
 These example paths assume the pool is named `Apps`. If your pool has a
 different name, replace `/mnt/Apps` with the correct pool path. Ensure the
-folders already exist before starting Compose. Set the app data and cache folders so
+folders already exist before installing the app. Set the app data and cache folders so
 UID/GID `568:568` can read and write. The web service needs write permission
 on the photo folder so an administrator can permanently delete originals; the
 worker only needs read/traverse permission. Use the TrueNAS ACL editor and apply
@@ -72,48 +66,123 @@ py -c "import secrets; print(secrets.token_urlsafe(48))"
 
 Use exactly the same value for every web container replica (this setup uses
 one). Do not use the sample value from any example. Changing the secret logs out
-all gallery visitors. The admin page also needs its own password; add that
+all gallery visitors. The admin page also needs its own password; configure that
 separately in step 3.
 
-## 3. Install the image on TrueNAS
+## 3. Install with TrueNAS Custom App
 
-Set `IMAGE` to the package URL for your GitHub repository, for example
-`ghcr.io/alexs/fdmedia-gallery:latest` (replace `alexs` and the repository name
-with yours). You can install the two services either with the TrueNAS Apps YAML
-editor or with Docker Compose over SSH.
-
-For the Apps YAML editor, open **Apps > Discover Apps > Custom App** and paste
-the contents of `docker-compose.yml`. Replace `${IMAGE:?...}` with your GHCR
-image URL, and replace the `GALLERY_SECRET` and `ADMIN_PASSWORD` expressions
-with their generated values from step 2. Check that the host paths match your
-datasets before installing. Do not also deploy the same app with Docker Compose.
-
-For a shell-based Compose deployment, copy only `docker-compose.yml` to a
-folder on TrueNAS, then open the TrueNAS Shell or connect over SSH. Change into
-that folder and confirm Docker Compose is available:
+Create the folders from step 1 and set permissions before installing. Generate
+two different values in the TrueNAS Shell:
 
 ```sh
-cd /path/to/fdmedia-gallery
-docker compose version
+openssl rand -hex 32
 ```
 
-Create a private `.env` next to the Compose file. Set `IMAGE` to your public
-GHCR package URL and include separate secrets for app sessions and admin access:
+Run the command twice. Use the first output as `SECRET` and the second as
+`ADMIN_PASSWORD`; save both in a password manager. Do not use the example
+placeholders below as secrets.
+
+In TrueNAS, open **Apps → Discover Apps → Custom App**, choose the YAML editor
+(sometimes labelled **Install via YAML**), and paste the Compose configuration
+below. Replace every `/mnt/POOL/...` path with the actual absolute path on your
+TrueNAS pool. Replace both secret placeholders with the generated values.
+
+```yaml
+services:
+  web:
+    image: ghcr.io/alex1612356356/fdmedia-gallery:latest
+    restart: unless-stopped
+    user: "568:568"
+    init: true
+    environment:
+      SECRET: "REPLACE_WITH_FIRST_RANDOM_SECRET"
+      ADMIN_PASSWORD: "REPLACE_WITH_SECOND_RANDOM_SECRET"
+      DATA: /data
+      CACHE: /cache
+      MEDIA: /media
+      PORT: "3000"
+      COOKIE_SECURE: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - /mnt/POOL/photos:/media:rw
+      - /mnt/POOL/apps/fdmedia-gallery/data:/data
+      - /mnt/POOL/apps/fdmedia-gallery/cache:/cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  worker:
+    image: ghcr.io/alex1612356356/fdmedia-gallery:latest
+    restart: unless-stopped
+    user: "568:568"
+    init: true
+    command: ["python", "worker.py"]
+    environment:
+      DATA: /data
+      CACHE: /cache
+      MEDIA: /media
+      INTERVAL: "30"
+    volumes:
+      - /mnt/POOL/photos:/media:ro
+      - /mnt/POOL/apps/fdmedia-gallery/data:/data
+      - /mnt/POOL/apps/fdmedia-gallery/cache:/cache
+```
+
+For example, if your pool is named `Tank`, photo files are in
+`/mnt/Tank/Photos`, and app data should live under `/mnt/Tank/Apps/fdmedia-gallery`,
+use these host paths:
+
+```text
+/mnt/Tank/Photos:/media
+/mnt/Tank/Apps/fdmedia-gallery/data:/data
+/mnt/Tank/Apps/fdmedia-gallery/cache:/cache
+```
+
+The web service mounts `/media` as writable so administrators can permanently
+delete original photos. The worker mounts it read-only. Both services need
+read/write access to the `data` and `cache` folders. Use the TrueNAS ACL editor
+to grant UID/GID `568:568` the needed permissions and apply them to existing
+child files and folders. Do not make the dataset world-writable.
+
+Review the YAML and select **Install**. Wait for both `web` and `worker` to show
+as running. The image is public; no GitHub username or registry password is
+needed.
+
+Open `http://TRUENAS-IP:3000/healthz` from your local network. A healthy install
+returns `{"ok":true}`. Then open `http://TRUENAS-IP:3000/admin` and sign in with
+the `ADMIN_PASSWORD` you configured. Create a gallery by entering its title,
+slug, existing photo subfolder relative to `/media`, client PIN, theme, and
+optional description.
+
+For public access, configure a DNS hostname and HTTPS reverse proxy or
+Cloudflare Tunnel before sharing gallery links. The default setting
+`COOKIE_SECURE: "true"` requires HTTPS for browser login. Do not expose port
+3000 directly to the internet. For a temporary LAN-only test without HTTPS,
+you can set `COOKIE_SECURE: "false"` and recreate the app; change it back to
+`"true"` before exposing the site publicly.
+
+If the image pull fails, confirm TrueNAS has working DNS and outbound HTTPS
+access to `ghcr.io`. Check the app logs in **Apps → fdmedia-gallery → Workloads**
+(the exact menu name varies by TrueNAS version).
+
+## 4. Install with Docker Compose over SSH
+
+Alternatively, copy `docker-compose.yml` to TrueNAS and deploy it from a shell.
+The Compose file uses environment variables for the image and secrets. Copy it
+to a folder on TrueNAS, then open the TrueNAS Shell or connect over SSH and
+change into that folder. Create a private `.env` file:
 
 ```sh
 umask 077
-printf 'IMAGE=ghcr.io/OWNER/REPOSITORY:latest\nGALLERY_SECRET=%s\nADMIN_PASSWORD=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
+printf 'IMAGE=ghcr.io/alex1612356356/fdmedia-gallery:latest\nGALLERY_SECRET=%s\nADMIN_PASSWORD=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
 ```
 
-Save both values securely. `GALLERY_SECRET` signs client login cookies;
-`ADMIN_PASSWORD` is the password for the album management page. Replace
-`OWNER/REPOSITORY` with the lowercase GitHub owner and repository name. If you
-already have a `.env`, preserve the existing secret values.
-
-Edit `docker-compose.yml` to confirm the media, data, and cache host paths match
-your TrueNAS datasets. The web service's photo mount must be writable for
-administrator photo deletion; the worker's photo mount remains read-only. Keep
-both data/cache mounts writable by UID/GID `568:568`. Then pull and start the services:
+Save the secret values securely. Edit `docker-compose.yml` and replace the
+example host paths with your dataset paths. Then validate and start the app:
 
 ```sh
 sudo docker compose config --quiet
@@ -123,28 +192,12 @@ sudo docker compose ps
 sudo docker compose logs --tail=100 web worker
 ```
 
-When using Compose, recreate the web service after changing its environment:
-
-```sh
-sudo docker compose up -d --force-recreate web
-```
-
-On TrueNAS, an administrator shell account may still lack permission to access
-the Docker daemon socket. The `permission denied` error for
-`/var/run/docker.sock` is a host privilege issue, not an app configuration
-error; use `sudo` for Docker Compose commands as shown. Do not `chmod` the
-Docker socket or make it world-writable. If `sudo` is unavailable or still
-returns a socket permission error, stop and use the SCALE-supported Apps
-workflow or ask the TrueNAS administrator to run the commands; do not change
-host Docker socket ownership or permissions.
+Use `sudo` if your TrueNAS account needs it to access Docker. Never change the
+Docker socket permissions to work around a permission error.
 
 The web service serves the gallery; the worker checks albums every 30 seconds
-and generates previews for newly uploaded or changed photos. Keep the event
-gallery page open or refresh it; new photos are added automatically after the
-worker finishes processing them. No service restart is needed for photo uploads.
-
-If `docker compose version` fails, do not install Docker packages manually on
-the TrueNAS host. Use the SCALE Apps workflow instead.
+and generates previews for newly uploaded or changed photos. New uploads are
+added after the worker finishes processing them; no service restart is needed.
 
 If pulling the image fails with a registry DNS timeout, check resolution from
 the TrueNAS shell:
@@ -169,7 +222,7 @@ If host name lookup works but pulling the image still times out, check that
 TrueNAS has outbound internet access to GitHub Container Registry and that the
 network/firewall allows DNS and HTTPS.
 
-## 4. Add an album and PIN
+## 5. Add an album and PIN
 
 For the friendly browser-based workflow, open `https://YOUR_HOST/admin` and
 enter `ADMIN_PASSWORD`. For private LAN-only HTTP access, first change
@@ -238,7 +291,7 @@ The gallery URL will be `https://YOUR_HOST/g/wedding-2026`. Allow a few minutes
 for the first scan and thumbnail generation. Check the worker logs if files are
 missing or unsupported.
 
-## 5. Configure HTTPS and network access
+## 6. Configure HTTPS and network access
 
 Configure a DNS hostname and HTTPS in a reverse proxy or Cloudflare Tunnel.
 Forward that hostname to `http://TRUE_NAS_LAN_IP:3000` (or the host port you
@@ -257,7 +310,7 @@ For private LAN-only testing, you may set `COOKIE_SECURE=false` and visit
 `http://TRUE_NAS_LAN_IP:3000/g/<slug>`. Do not use that setting for a
 public/internet-facing deployment.
 
-## 6. Verify
+## 7. Verify
 
 - `https://YOUR_HOST/healthz` returns `{"ok":true}`.
 - `https://YOUR_HOST/g/wedding-2026` loads the PIN screen.
