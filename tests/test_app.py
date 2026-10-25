@@ -199,6 +199,37 @@ class GalleryAppTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_admin_can_change_theme_after_gallery_creation(self):
+        admin_app = create_app(
+            data_dir=self.data,
+            cache_dir=self.cache,
+            media_dir=self.media,
+            secret="test-secret-that-is-at-least-32-bytes",
+            admin_password="admin-password-for-tests-at-least-24",
+            cookie_secure=False,
+        )
+        admin_client = admin_app.test_client()
+        update_url = "/api/admin/albums/event-one"
+
+        self.assertEqual(admin_client.put(update_url, json={"theme": "wedding"}).status_code, 401)
+        admin_client.post(
+            "/api/admin/login",
+            json={"password": "admin-password-for-tests-at-least-24"},
+        )
+        invalid = admin_client.put(update_url, json={"theme": "unknown"})
+        self.assertEqual(invalid.status_code, 400)
+
+        response = admin_client.put(update_url, json={"theme": "prom-girl"})
+        self.assertEqual(response.status_code, 200)
+        album = json.loads((self.data / "albums.json").read_text(encoding="utf-8"))["event-one"]
+        self.assertEqual(album["theme"], "prom-girl")
+        self.assertEqual(album["folder"], "event")
+        self.assertEqual(album["description"], "")
+
+        visitor = admin_app.test_client()
+        visitor.post("/api/event-one/login", json={"pin": "12345678"})
+        self.assertEqual(visitor.get("/api/event-one/items").json["theme"], "prom-girl")
+
     def test_admin_can_delete_album_without_deleting_original_photos(self):
         admin_app = create_app(
             data_dir=self.data,

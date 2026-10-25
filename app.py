@@ -283,6 +283,27 @@ def create_app(
         log.info("Created album %s through admin page", slug)
         return jsonify(ok=True, slug=slug, title=title, url=f"/g/{slug}", result=result), 201
 
+    @app.put("/api/admin/albums/<slug>")
+    @require_admin
+    def admin_update_album(slug):
+        if not _valid_slug(slug):
+            abort(404)
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify(error="Cerere invalidă."), 400
+        theme = body.get("theme")
+        if not isinstance(theme, str) or theme not in ALBUM_THEMES:
+            return jsonify(error="Tema selectată nu este validă."), 400
+        with admin_write_lock:
+            albums = read_albums()
+            album = albums.get(slug)
+            if not isinstance(album, dict):
+                abort(404)
+            album["theme"] = theme
+            _atomic_json(data_dir / "albums.json", albums)
+        log.info("Updated theme for album %s to %s", slug, theme)
+        return jsonify(ok=True, slug=slug, theme=theme)
+
     @app.delete("/api/admin/albums/<slug>")
     @require_admin
     def admin_delete_album(slug):

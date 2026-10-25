@@ -241,10 +241,14 @@ configuration above. Create an album by entering its
 display title, URL slug, existing folder relative to `/media`, and the PIN
 clients will use. Choose one of the built-in themes (default, wedding, baptism
 boy/girl, or prom boy/girl). Each theme has its own full-page color palette,
-background treatment, and accent pattern. Optionally add a gallery description. Leaving
-the description empty uses the default message, “Am păstrat aici momentele
-voastre. Bucurați-vă de ele.” The page also lists existing albums and displays
-their theme and description. Use the **Șterge** button to remove an album from
+background treatment, and accent pattern. The administrator can change a
+gallery's theme at any time from its entry in the existing-albums list; clients
+see the new look when they next open or refresh the gallery. Optionally add a
+gallery description. Leaving the description empty uses the default message,
+“Am păstrat aici momentele voastre. Bucurați-vă de ele.” The page also lists
+existing albums and displays
+their folder and description, with a theme selector and **Salvează tema**
+button. Use the **Șterge** button to remove an album from
 the app and disable its gallery link; this does not delete original photos from
 `/media`.
 

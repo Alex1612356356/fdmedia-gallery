@@ -14,6 +14,11 @@
   --theme-background: #101012;
   --theme-background-end: #090909;
   --theme-pattern: linear-gradient(90deg, rgba(9,9,9,.2), transparent 70%), repeating-linear-gradient(135deg, transparent 0 62px, rgba(255,255,255,.018) 63px 64px);
+  --gallery-pattern: radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.025), transparent 65%);
+  --theme-tile-border: rgba(255,255,255,.12);
+  --theme-tile-radius: 0;
+  --theme-heading-font: inherit;
+  --theme-heading-spacing: -.045em;
   --top-background: rgba(9, 9, 9, .91);
   --row: 260px;
   --gap: 8px;
@@ -42,7 +47,12 @@ button { color: inherit; }
   --theme-glow: rgba(220, 149, 139, .27);
   --theme-background: #29191b;
   --theme-background-end: #100b0d;
-  --theme-pattern: radial-gradient(ellipse at 78% 26%, rgba(255,221,190,.13), transparent 26%), repeating-linear-gradient(45deg, transparent 0 48px, rgba(242,199,196,.035) 49px 50px);
+  --theme-pattern: radial-gradient(ellipse at 78% 26%, rgba(255,221,190,.2), transparent 28%), repeating-linear-gradient(45deg, transparent 0 48px, rgba(242,199,196,.08) 49px 50px), repeating-linear-gradient(135deg, transparent 0 92px, rgba(242,199,196,.045) 93px 94px);
+  --gallery-pattern: radial-gradient(circle at 20px 20px, rgba(242,199,196,.09) 1px, transparent 2px), radial-gradient(ellipse at 50% 0%, rgba(220,149,139,.12), transparent 55%);
+  --theme-tile-border: rgba(242,199,196,.28);
+  --theme-tile-radius: 5px;
+  --theme-heading-font: Georgia, "Times New Roman", serif;
+  --theme-heading-spacing: -.055em;
   --top-background: rgba(16, 11, 13, .94);
 }
 :root[data-theme="baptism-boy"] {
@@ -55,7 +65,12 @@ button { color: inherit; }
   --theme-glow: rgba(77, 157, 210, .28);
   --theme-background: #102536;
   --theme-background-end: #081018;
-  --theme-pattern: radial-gradient(ellipse at 76% 24%, rgba(113,203,249,.16), transparent 31%), repeating-linear-gradient(0deg, transparent 0 42px, rgba(169,217,245,.035) 43px 44px);
+  --theme-pattern: radial-gradient(circle at 78% 30%, rgba(113,203,249,.2) 0 2px, transparent 3px 42px), radial-gradient(circle at 78% 30%, transparent 0 55px, rgba(169,217,245,.12) 56px 57px, transparent 58px 100px), radial-gradient(ellipse at 76% 24%, rgba(113,203,249,.16), transparent 31%);
+  --gallery-pattern: radial-gradient(circle at 22px 22px, rgba(169,217,245,.12) 0 2px, transparent 3px 44px), radial-gradient(ellipse at 80% 0%, rgba(77,157,210,.11), transparent 55%);
+  --theme-tile-border: rgba(169,217,245,.3);
+  --theme-tile-radius: 18px 4px;
+  --theme-heading-font: "Trebuchet MS", Arial, sans-serif;
+  --theme-heading-spacing: -.025em;
   --top-background: rgba(8, 16, 24, .94);
 }
 :root[data-theme="baptism-girl"] {
@@ -68,7 +83,12 @@ button { color: inherit; }
   --theme-glow: rgba(211, 107, 157, .28);
   --theme-background: #30172b;
   --theme-background-end: #160d15;
-  --theme-pattern: radial-gradient(ellipse at 76% 24%, rgba(255,168,207,.16), transparent 30%), repeating-radial-gradient(ellipse at 100% 0%, transparent 0 46px, rgba(243,185,209,.035) 47px 48px);
+  --theme-pattern: radial-gradient(ellipse at 80% 20%, rgba(255,168,207,.2), transparent 30%), repeating-radial-gradient(ellipse at 100% 0%, transparent 0 34px, rgba(243,185,209,.09) 35px 36px, transparent 37px 70px);
+  --gallery-pattern: radial-gradient(circle at 24px 24px, rgba(243,185,209,.13) 0 1px, transparent 2px), radial-gradient(circle at 48px 48px, rgba(243,185,209,.08) 0 1px, transparent 2px), radial-gradient(ellipse at 50% 0%, rgba(211,107,157,.12), transparent 55%);
+  --theme-tile-border: rgba(243,185,209,.32);
+  --theme-tile-radius: 16px;
+  --theme-heading-font: Georgia, "Times New Roman", serif;
+  --theme-heading-spacing: -.06em;
   --top-background: rgba(22, 13, 21, .94);
 }
 :root[data-theme="prom-boy"] {
@@ -81,7 +101,12 @@ button { color: inherit; }
   --theme-glow: rgba(182, 136, 53, .3);
   --theme-background: #29210f;
   --theme-background-end: #100e09;
-  --theme-pattern: radial-gradient(ellipse at 76% 22%, rgba(255,210,107,.17), transparent 28%), repeating-linear-gradient(115deg, transparent 0 88px, rgba(230,197,121,.055) 89px 90px);
+  --theme-pattern: radial-gradient(ellipse at 76% 22%, rgba(255,210,107,.2), transparent 28%), repeating-linear-gradient(45deg, transparent 0 46px, rgba(230,197,121,.09) 47px 48px, transparent 49px 92px), repeating-linear-gradient(135deg, transparent 0 46px, rgba(230,197,121,.09) 47px 48px, transparent 49px 92px);
+  --gallery-pattern: repeating-linear-gradient(45deg, transparent 0 42px, rgba(230,197,121,.045) 43px 44px, transparent 45px 84px), radial-gradient(ellipse at 50% 0%, rgba(182,136,53,.13), transparent 56%);
+  --theme-tile-border: rgba(230,197,121,.35);
+  --theme-tile-radius: 0;
+  --theme-heading-font: "Arial Narrow", "Trebuchet MS", sans-serif;
+  --theme-heading-spacing: .015em;
   --top-background: rgba(16, 14, 9, .94);
 }
 :root[data-theme="prom-girl"] {
@@ -94,7 +119,12 @@ button { color: inherit; }
   --theme-glow: rgba(151, 96, 211, .32);
   --theme-background: #28153d;
   --theme-background-end: #100b18;
-  --theme-pattern: radial-gradient(ellipse at 77% 23%, rgba(213,143,255,.19), transparent 30%), repeating-linear-gradient(135deg, transparent 0 52px, rgba(212,179,243,.045) 53px 54px);
+  --theme-pattern: radial-gradient(ellipse at 77% 23%, rgba(213,143,255,.22), transparent 30%), radial-gradient(circle at 72% 34%, rgba(212,179,243,.25) 0 1px, transparent 2px), radial-gradient(circle at 91% 16%, rgba(255,220,243,.45) 0 2px, transparent 3px), repeating-linear-gradient(135deg, transparent 0 52px, rgba(212,179,243,.08) 53px 54px);
+  --gallery-pattern: radial-gradient(circle at 20px 18px, rgba(212,179,243,.14) 0 1px, transparent 2px), radial-gradient(circle at 54px 48px, rgba(255,220,243,.1) 0 2px, transparent 3px), radial-gradient(ellipse at 50% 0%, rgba(151,96,211,.15), transparent 56%);
+  --theme-tile-border: rgba(212,179,243,.33);
+  --theme-tile-radius: 22px 6px;
+  --theme-heading-font: Georgia, "Times New Roman", serif;
+  --theme-heading-spacing: -.055em;
   --top-background: rgba(16, 11, 24, .94);
 }
 
@@ -200,8 +230,9 @@ button { color: inherit; }
   margin: 0;
   overflow-wrap: anywhere;
   font-size: clamp(3.1rem, 10vw, 8.7rem);
+  font-family: var(--theme-heading-font);
   font-weight: 950;
-  letter-spacing: -.045em;
+  letter-spacing: var(--theme-heading-spacing);
   line-height: .98;
   text-wrap: balance;
   text-shadow: 0 8px 46px var(--theme-glow);
@@ -212,15 +243,15 @@ button { color: inherit; }
 .count-number { color: var(--theme-accent); font-size: clamp(2.5rem, 5vw, 4rem); font-weight: 300; letter-spacing: -.07em; line-height: 1; }
 .count-label { margin-top: 10px; color: var(--muted); font-size: .62rem; font-weight: 800; letter-spacing: .15em; }
 
-.gallery-section { padding: 0 clamp(14px, 3vw, 44px) 64px; }
+.gallery-section { padding: 0 clamp(14px, 3vw, 44px) 64px; background-image: var(--gallery-pattern); }
 .gallery-heading {
   display: flex;
   align-items: center;
   gap: 18px;
   padding: 24px 0 19px;
 }
-.gallery-heading-title { flex: 0 0 auto; font-size: .65rem; font-weight: 850; letter-spacing: .17em; }
-.gallery-heading-line { height: 1px; flex: 1 1 auto; background: var(--line); }
+.gallery-heading-title { flex: 0 0 auto; color: var(--theme-accent); font-size: .65rem; font-weight: 850; letter-spacing: .17em; }
+.gallery-heading-line { height: 1px; flex: 1 1 auto; background: var(--line-strong); }
 .gallery-hint { flex: 0 0 auto; color: var(--muted); font-size: .75rem; }
 .gallery-notice { min-height: 0; margin: 0; color: var(--soft); font-size: .78rem; }
 .gallery-notice:not(:empty) { padding: 0 0 14px; }
@@ -233,7 +264,8 @@ button { color: inherit; }
   flex: var(--ar) 1 calc(var(--ar) * var(--row));
   max-width: min(calc(var(--ar) * var(--row) * 1.8), 100%);
   overflow: hidden;
-  border: 1px solid rgba(255,255,255,.05);
+  border: 1px solid var(--theme-tile-border);
+  border-radius: var(--theme-tile-radius);
   background: var(--surface);
   cursor: zoom-in;
   transition: border-color .25s ease, transform .3s ease;
@@ -424,6 +456,11 @@ button { color: inherit; }
 .album-open { flex: 0 0 auto; color: var(--text); font-size: .72rem; font-weight: 750; text-decoration: none; }
 .album-open:hover { text-decoration: underline; }
 .album-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 16px; }
+.album-theme-editor { display: flex; align-items: center; gap: 7px; }
+.album-theme-editor select { min-height: 36px; max-width: 145px; padding: 6px 8px; border: 1px solid var(--line-strong); background: #090909; color: var(--text); font: inherit; font-size: .68rem; }
+.album-theme-save { min-height: 36px; padding: 0 9px; border: 1px solid var(--line-strong); background: transparent; color: var(--soft); cursor: pointer; font: inherit; font-size: .65rem; font-weight: 750; }
+.album-theme-save:hover { border-color: var(--text); color: var(--text); }
+.album-theme-save:disabled { cursor: wait; opacity: .65; }
 .album-delete { padding: 8px 10px; border: 1px solid var(--line-strong); background: transparent; color: var(--soft); cursor: pointer; font: inherit; font-size: .68rem; font-weight: 750; }
 .album-delete:hover { border-color: #d66; color: #ff9b9b; }
 .album-delete:disabled { cursor: wait; opacity: .65; }
@@ -464,6 +501,10 @@ button { color: inherit; }
   .admin-intro { position: static; }
   #adminLogin, .admin-dashboard { grid-column: 1; }
   .admin-dashboard { min-width: 0; }
+  .album-row { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .album-actions { width: 100%; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+  .album-theme-editor { flex: 1 1 auto; }
+  .album-theme-editor select { flex: 1 1 auto; max-width: none; }
   .admin-intro h1 { font-size: clamp(3rem, 14cqi, 5.8rem); }
 }
 @media (max-width: 480px) {

@@ -31,8 +31,6 @@ async function refreshAlbums() {
     const details = document.createElement('div');
     const title = document.createElement('h3');
     title.textContent = album.title;
-    const folder = document.createElement('p');
-    const theme = document.createElement('p');
     const themeNames = {
       default: 'Implicită',
       wedding: 'Nuntă',
@@ -41,8 +39,9 @@ async function refreshAlbums() {
       'prom-boy': 'Majorat băiat',
       'prom-girl': 'Majorat fată',
     };
-    theme.textContent = `${themeNames[album.theme] || themeNames.default} · ${album.folder} · /g/${album.slug}`;
-    details.append(title, theme);
+    const metadata = document.createElement('p');
+    metadata.textContent = `${album.folder} · /g/${album.slug}`;
+    details.append(title, metadata);
     if (album.description) {
       const description = document.createElement('p');
       description.textContent = album.description;
@@ -54,6 +53,41 @@ async function refreshAlbums() {
     link.textContent = 'Deschide →';
     const actions = document.createElement('div');
     actions.className = 'album-actions';
+    const themeEditor = document.createElement('div');
+    themeEditor.className = 'album-theme-editor';
+    const themeSelect = document.createElement('select');
+    themeSelect.setAttribute('aria-label', `Tema galeriei ${album.title}`);
+    Object.entries(themeNames).forEach(([value, label]) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      option.selected = value === (album.theme || 'default');
+      themeSelect.append(option);
+    });
+    const saveTheme = document.createElement('button');
+    saveTheme.className = 'album-theme-save';
+    saveTheme.type = 'button';
+    saveTheme.textContent = 'Salvează tema';
+    saveTheme.addEventListener('click', async () => {
+      saveTheme.disabled = true;
+      try {
+        const response = await api(`albums/${encodeURIComponent(album.slug)}`, {
+          method: 'PUT',
+          body: JSON.stringify({ theme: themeSelect.value }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Nu am putut actualiza tema.');
+        saveTheme.textContent = 'Salvat';
+        window.setTimeout(() => { saveTheme.textContent = 'Salvează tema'; }, 1600);
+      } catch (error) {
+        window.alert(error instanceof TypeError
+          ? 'Nu ne-am putut conecta la server.'
+          : error.message);
+      } finally {
+        saveTheme.disabled = false;
+      }
+    });
+    themeEditor.append(themeSelect, saveTheme);
     const remove = document.createElement('button');
     remove.className = 'album-delete';
     remove.type = 'button';
@@ -74,7 +108,7 @@ async function refreshAlbums() {
         remove.disabled = false;
       }
     });
-    actions.append(link, remove);
+    actions.append(link, themeEditor, remove);
     row.append(details, actions);
     list.append(row);
   });
