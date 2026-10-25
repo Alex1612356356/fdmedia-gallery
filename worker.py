@@ -27,6 +27,10 @@ RAW_EXTENSIONS = re.compile(r"\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$", re.IGNORECA
 VIDEO_EXTENSIONS = re.compile(r"\.(mp4|mov|mkv|m4v|avi)$", re.IGNORECASE)
 
 
+class AlbumRemoved(Exception):
+    pass
+
+
 def read_json(path, default):
     try:
         with path.open(encoding="utf-8") as handle:
@@ -60,6 +64,13 @@ def detect_kind(name):
     return None
 
 
+def album_is_registered(slug):
+    albums = read_json(DATA / "albums.json", {})
+    if not isinstance(albums, dict):
+        raise ValueError("albums.json must contain a JSON object")
+    return slug in albums
+
+
 def extract_raw_preview(source):
     last_error = None
     for tag in ("PreviewImage", "JpgFromRaw"):
@@ -78,14 +89,53 @@ def extract_raw_preview(source):
     raise RuntimeError(f"No embedded JPEG preview found in {source.name}") from last_error
 
 
-def run_ffmpeg(args):
-    subprocess.run(
-        ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", *args],
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=3600,
-    )
+def run_ffmpeg(args, slug=None):
+    command = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", *args]
+    if slug is None:
+        subprocess.run(
+            command,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=3600,
+        )
+        return
+
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    deadline = time.monotonic() + 3600
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            process.kill()
+            stdout, stderr = process.communicate()
+            raise subprocess.TimeoutExpired(command, 3600, output=stdout, stderr=stderr)
+        try:
+            stdout, stderr = process.communicate(timeout=min(1, remaining))
+            break
+        except subprocess.TimeoutExpired:
+            try:
+                still_registered = album_is_registered(slug)
+            except (OSError, ValueError):
+                process.terminate()
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate()
+                raise
+            if not still_registered:
+                process.terminate()
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate()
+                raise AlbumRemoved(slug)
+
+    if process.returncode:
+        raise subprocess.CalledProcessError(
+            process.returncode, command, output=stdout, stderr=stderr
+        )
 
 
 def make_webp(image_source, target, width, quality):
@@ -107,9 +157,9 @@ def process_media(source, slug, name, kind):
         poster.parent.mkdir(parents=True, exist_ok=True)
         video.parent.mkdir(parents=True, exist_ok=True)
         try:
-            run_ffmpeg(["-ss", "1", "-i", str(source), "-frames:v", "1", str(poster)])
+            run_ffmpeg(["-ss", "1", "-i", str(source), "-frames:v", "1", str(poster)], slug)
         except (OSError, subprocess.SubprocessError):
-            run_ffmpeg(["-i", str(source), "-frames:v", "1", str(poster)])
+            run_ffmpeg(["-i", str(source), "-frames:v", "1", str(poster)], slug)
         run_ffmpeg(
             [
                 "-i",
@@ -135,7 +185,8 @@ def process_media(source, slug, name, kind):
                 "-movflags",
                 "+faststart",
                 str(video),
-            ]
+            ],
+            slug,
         )
         image_source = poster
     elif kind == "raw":
@@ -156,6 +207,10 @@ def cache_is_complete(root, name, kind):
 
 
 def scan_album(slug, album):
+    if not album_is_registered(slug):
+        LOG.info("stopping scan for removed album %s", slug)
+        return
+
     folder = album.get("folder")
     if not isinstance(folder, str) or not folder:
         raise ValueError(f"Album {slug} has no valid media folder")
@@ -175,6 +230,9 @@ def scan_album(slug, album):
     items = []
 
     for source in sorted(source_dir.iterdir(), key=lambda entry: entry.name.casefold()):
+        if not album_is_registered(slug):
+            LOG.info("stopping scan for removed album %s", slug)
+            return
         if not source.is_file():
             continue
         name = source.name
@@ -193,6 +251,9 @@ def scan_album(slug, album):
             else:
                 dimensions = process_media(source, slug, name, kind)
                 LOG.info("processed %s %s", slug, name)
+            if not album_is_registered(slug):
+                LOG.info("stopping scan for removed album %s", slug)
+                return
             if not dimensions["w"] or not dimensions["h"]:
                 raise ValueError("Could not determine image dimensions")
             items.append(
@@ -210,6 +271,9 @@ def scan_album(slug, album):
                 index_file,
                 {"updated": int(time.time() * 1000), "items": items},
             )
+        except AlbumRemoved:
+            LOG.info("stopping scan for removed album %s", slug)
+            return
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
             detail = getattr(exc, "stderr", None)
             if isinstance(detail, bytes):

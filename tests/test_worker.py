@@ -63,6 +63,36 @@ class WorkerTests(unittest.TestCase):
         index = json.loads((self.cache / "summer" / "index.json").read_text(encoding="utf-8"))
         self.assertEqual([item["n"] for item in index["items"]], ["photo.jpg", "second.jpg"])
 
+    def test_scan_stops_when_album_is_removed_during_processing(self):
+        Image.new("RGB", (640, 480), "blue").save(self.media / "event" / "second.jpg")
+
+        def process_media(_source, _slug, name, _kind):
+            if name == "photo.jpg":
+                (self.data / "albums.json").write_text("{}", encoding="utf-8")
+            return {"w": 640, "h": 480}
+
+        with patch.object(worker, "MEDIA", self.media), patch.object(worker, "CACHE", self.cache), patch.object(
+            worker, "DATA", self.data
+        ), patch.object(worker, "process_media", side_effect=process_media) as process:
+            worker.scan_once()
+
+        self.assertEqual(process.call_count, 1)
+        self.assertFalse((self.cache / "summer" / "index.json").exists())
+
+    def test_ffmpeg_is_terminated_when_album_is_removed(self):
+        process = unittest.mock.Mock()
+        process.communicate.side_effect = [
+            worker.subprocess.TimeoutExpired("ffmpeg", 1),
+            (b"", b""),
+        ]
+
+        with patch.object(worker.subprocess, "Popen", return_value=process), patch.object(
+            worker, "album_is_registered", return_value=False
+        ), self.assertRaises(worker.AlbumRemoved):
+            worker.run_ffmpeg(["-i", "video.mp4"], "summer")
+
+        process.terminate.assert_called_once()
+
     def test_video_transcode_maps_supported_streams_and_uses_compatible_pixel_format(self):
         source = self.media / "event" / "sample.mov"
         source.touch()

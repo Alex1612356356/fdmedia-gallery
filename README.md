@@ -198,7 +198,8 @@ Docker socket permissions to work around a permission error.
 The web service serves the gallery; the worker checks albums every 30 seconds
 and generates previews for newly uploaded or changed photos. Processed items
 are added to the gallery as they finish, so large video conversions do not
-block already-processed photos. No service restart is needed for photo uploads.
+block already-processed photos. Removing an album stops its active scan and
+video conversion. No service restart is needed for photo uploads.
 
 If pulling the image fails with a registry DNS timeout, check resolution from
 the TrueNAS shell:
