@@ -238,7 +238,8 @@ Then visit `http://TRUE_NAS_LAN_IP:3050/admin` when using the TrueNAS Custom App
 configuration above. Create an album by entering its
 display title, URL slug, existing folder relative to `/media`, and the PIN
 clients will use. Choose one of the built-in themes (default, wedding, baptism
-boy/girl, or prom boy/girl) and optionally add a gallery description. Leaving
+boy/girl, or prom boy/girl). Each theme has its own full-page color palette,
+background treatment, and accent pattern. Optionally add a gallery description. Leaving
 the description empty uses the default message, “Am păstrat aici momentele
 voastre. Bucurați-vă de ele.” The page also lists existing albums and displays
 their theme and description. Use the **Șterge** button to remove an album from

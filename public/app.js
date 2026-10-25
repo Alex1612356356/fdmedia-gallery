@@ -32,6 +32,7 @@ async function load() {
     $('#title').textContent = d.title || 'Galerie foto';
     $('#description').textContent = d.description || 'Am păstrat aici momentele voastre. Bucurați-vă de ele.';
     $('#hero').dataset.theme = d.theme || 'default';
+    document.documentElement.dataset.theme = d.theme || 'default';
     document.title = (d.title || 'Galerie foto') + ' — fdmedia.studio';
     $('#dlAll').href = `/api/${encodeURIComponent(slug)}/download`;
     ['filterFav', 'dlAll'].forEach(i => $('#' + i).hidden = false);
