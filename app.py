@@ -17,7 +17,7 @@ from pathlib import PurePosixPath
 from flask import Flask, abort, jsonify, make_response, redirect, request, send_file, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from cli import ALBUM_THEMES, add_album
+from cli import ALBUM_THEMES, add_album, decrypt_album_pin
 
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
@@ -470,6 +470,7 @@ def create_app(
                 "cover": album.get("cover"),
                 "expires_at": album.get("expires_at"),
                 "expired": _album_expired(album),
+                "pin_recoverable": isinstance(album.get("pin_encrypted"), str),
                 "cover_options": album_cover_options(slug),
                 "links": [
                     {"id": link["id"], "allow_upload": link["allow_upload"]}
@@ -524,7 +525,17 @@ def create_app(
                 return jsonify(error="Există deja un album cu acest identificator."), 409
             try:
                 folder_path.mkdir(parents=True, exist_ok=True)
-                result = add_album(data_dir, media_dir, slug, title, folder, pin, theme, description)
+                result = add_album(
+                    data_dir,
+                    media_dir,
+                    slug,
+                    title,
+                    folder,
+                    pin,
+                    theme,
+                    description,
+                    secret=secret,
+                )
             except (OSError, ValueError, json.JSONDecodeError) as exc:
                 return jsonify(error=str(exc)), 400
             if expires_at:
@@ -533,6 +544,23 @@ def create_app(
                 _atomic_json(data_dir / "albums.json", albums)
         log.info("Created album %s through admin page", slug)
         return jsonify(ok=True, slug=slug, title=title, url=f"/g/{slug}", result=result), 201
+
+    @app.get("/api/admin/albums/<slug>/pin")
+    @require_admin
+    def admin_reveal_album_pin(slug):
+        album = album_for(slug)
+        encrypted_pin = album.get("pin_encrypted")
+        if not isinstance(encrypted_pin, str):
+            return jsonify(error="PIN-ul existent nu poate fi recuperat fără schimbare."), 409
+        try:
+            pin = decrypt_album_pin(encrypted_pin, secret)
+        except ValueError:
+            log.exception("Could not decrypt stored PIN for album %s", slug)
+            return jsonify(error="Nu am putut decripta PIN-ul galeriei. Verifică SECRET-ul aplicației."), 500
+        response = jsonify(pin=pin)
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
 
     @app.post("/api/admin/albums/<slug>/links")
     @require_admin

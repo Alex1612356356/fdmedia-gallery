@@ -492,6 +492,9 @@ button { color: inherit; }
 .album-delete { padding: 8px 10px; border: 1px solid var(--line-strong); background: transparent; color: var(--soft); cursor: pointer; font: inherit; font-size: .68rem; font-weight: 750; }
 .album-delete:hover { border-color: #d66; color: #ff9b9b; }
 .album-delete:disabled { cursor: wait; opacity: .65; }
+.album-pin-control { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 9px; }
+.album-pin-control .album-theme-save:disabled { cursor: not-allowed; opacity: .7; }
+.album-pin-value { color: var(--soft); font-size: .68rem; overflow-wrap: anywhere; }
 .album-links { flex: 1 1 100%; min-width: 0; padding: 12px; border: 1px solid var(--line); background: var(--surface); }
 .album-links h4 { margin: 0; font-size: .73rem; }
 .album-links > p { margin: 4px 0 10px; color: var(--muted); font-size: .65rem; }

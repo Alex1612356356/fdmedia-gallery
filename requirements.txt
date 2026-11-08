@@ -1,4 +1,5 @@
 Flask>=3.0,<4
+cryptography>=42,<50
 Pillow>=10,<13
 pillow-heif>=0.16,<1.1
 gunicorn>=22,<24

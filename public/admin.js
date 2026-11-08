@@ -99,6 +99,41 @@ async function refreshAlbums() {
       ? album.expired ? `Expirată: ${displayDate(album.expires_at)}` : `Expiră: ${displayDate(album.expires_at)}`
       : 'Fără expirare';
     details.append(expiration);
+    const pinControl = document.createElement('div');
+    pinControl.className = 'album-pin-control';
+    const revealPin = document.createElement('button');
+    revealPin.className = 'album-theme-save';
+    revealPin.type = 'button';
+    revealPin.textContent = 'Afișează PIN-ul';
+    const pinValue = document.createElement('span');
+    pinValue.className = 'album-pin-value';
+    if (album.pin_recoverable) {
+      revealPin.addEventListener('click', async () => {
+        if (pinValue.textContent) {
+          pinValue.textContent = '';
+          revealPin.textContent = 'Afișează PIN-ul';
+          return;
+        }
+        revealPin.disabled = true;
+        try {
+          const response = await api(`albums/${encodeURIComponent(album.slug)}/pin`);
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Nu am putut afișa PIN-ul.');
+          pinValue.textContent = result.pin;
+          revealPin.textContent = 'Ascunde PIN-ul';
+        } catch (error) {
+          window.alert(error instanceof TypeError ? 'Nu ne-am putut conecta la server.' : error.message);
+        } finally {
+          revealPin.disabled = false;
+        }
+      });
+    } else {
+      revealPin.disabled = true;
+      revealPin.textContent = 'PIN nerecuperabil';
+      pinValue.textContent = 'Acest PIN a fost setat înainte de activarea afișării și nu poate fi recuperat fără schimbare.';
+    }
+    pinControl.append(revealPin, pinValue);
+    details.append(pinControl);
     const link = document.createElement('a');
     link.className = 'album-open';
     link.href = `/g/${encodeURIComponent(album.slug)}`;
@@ -295,7 +330,14 @@ async function loadAdmin() {
     const state = await response.json();
     loginSection.hidden = state.authenticated;
     dashboard.hidden = !state.authenticated;
-    if (state.authenticated) await refreshAlbums();
+    if (state.authenticated) {
+      await refreshAlbums();
+    } else {
+      document.querySelectorAll('.album-pin-value').forEach(value => { value.textContent = ''; });
+      document.querySelectorAll('.album-pin-control button').forEach(button => {
+        if (!button.disabled) button.textContent = 'Afișează PIN-ul';
+      });
+    }
     if (state.authenticated) await refreshWorkerStatus();
   } catch (error) {
     loginSection.hidden = false;

@@ -217,6 +217,7 @@ class GalleryAppTests(unittest.TestCase):
         self.assertIn(b"Administrare", admin_page.data)
         admin_page.close()
         self.assertEqual(client.get("/api/admin/albums").status_code, 401)
+        self.assertEqual(client.get("/api/admin/albums/new-event/pin").status_code, 401)
         self.assertEqual(
             client.post("/api/admin/login", json={"password": "wrong"}).status_code,
             401,
@@ -241,6 +242,15 @@ class GalleryAppTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json["url"], "/g/new-event")
+        albums_response = client.get("/api/admin/albums")
+        created_album = next(album for album in albums_response.json if album["slug"] == "new-event")
+        self.assertTrue(created_album["pin_recoverable"])
+        self.assertNotIn("pin", created_album)
+        self.assertNotIn("pin_encrypted", created_album)
+        revealed_pin = client.get("/api/admin/albums/new-event/pin")
+        self.assertEqual(revealed_pin.status_code, 200)
+        self.assertEqual(revealed_pin.json, {"pin": "98765432"})
+        self.assertEqual(revealed_pin.headers["Cache-Control"], "private, no-store")
 
         visitor = admin_app.test_client()
         self.assertEqual(
@@ -261,6 +271,34 @@ class GalleryAppTests(unittest.TestCase):
             },
         )
         self.assertEqual(duplicate.status_code, 409)
+
+    def test_existing_album_pin_remains_unchanged_but_cannot_be_revealed(self):
+        admin_app = create_app(
+            data_dir=self.data,
+            cache_dir=self.cache,
+            media_dir=self.media,
+            secret="test-secret-that-is-at-least-32-bytes",
+            admin_password="admin-password-for-tests-at-least-24",
+            cookie_secure=False,
+        )
+        client = admin_app.test_client()
+        client.post("/api/admin/login", json={"password": "admin-password-for-tests-at-least-24"})
+        before = json.loads((self.data / "albums.json").read_text(encoding="utf-8"))["event-one"]
+
+        album_list = client.get("/api/admin/albums")
+        existing_album = next(album for album in album_list.json if album["slug"] == "event-one")
+        self.assertFalse(existing_album["pin_recoverable"])
+        reveal = client.get("/api/admin/albums/event-one/pin")
+        self.assertEqual(reveal.status_code, 409)
+
+        after = json.loads((self.data / "albums.json").read_text(encoding="utf-8"))["event-one"]
+        self.assertEqual(after["salt"], before["salt"])
+        self.assertEqual(after["hash"], before["hash"])
+        visitor = admin_app.test_client()
+        self.assertEqual(
+            visitor.post("/api/event-one/login", json={"pin": "12345678"}).status_code,
+            200,
+        )
 
     def test_gallery_defaults_theme_and_description(self):
         self.client.post("/api/event-one/login", json={"pin": "12345678"})

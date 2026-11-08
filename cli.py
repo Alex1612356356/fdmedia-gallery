@@ -1,6 +1,8 @@
+import base64
 import argparse
 import getpass
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -8,12 +10,42 @@ import secrets
 import sys
 from pathlib import Path
 
+from cryptography.fernet import Fernet, InvalidToken
+
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 ALBUM_THEMES = {"default", "wedding", "baptism-boy", "baptism-girl", "prom-boy", "prom-girl"}
+PIN_ENCRYPTION_CONTEXT = b"fdmedia-gallery:album-pin:v1"
 
 
-def add_album(data_dir, media_dir, slug, title, folder, pin, theme="default", description=""):
+def encrypt_album_pin(pin, secret):
+    key = base64.urlsafe_b64encode(
+        hmac.new(secret.encode("utf-8"), PIN_ENCRYPTION_CONTEXT, hashlib.sha256).digest()
+    )
+    return Fernet(key).encrypt(pin.encode("utf-8")).decode("ascii")
+
+
+def decrypt_album_pin(encrypted_pin, secret):
+    key = base64.urlsafe_b64encode(
+        hmac.new(secret.encode("utf-8"), PIN_ENCRYPTION_CONTEXT, hashlib.sha256).digest()
+    )
+    try:
+        return Fernet(key).decrypt(encrypted_pin.encode("ascii")).decode("utf-8")
+    except (InvalidToken, UnicodeDecodeError, UnicodeEncodeError) as exc:
+        raise ValueError("Stored album PIN cannot be decrypted.") from exc
+
+
+def add_album(
+    data_dir,
+    media_dir,
+    slug,
+    title,
+    folder,
+    pin,
+    theme="default",
+    description="",
+    secret=None,
+):
     if not SLUG_RE.fullmatch(slug):
         raise ValueError("Slug must be 1-63 lowercase letters, digits, or hyphens and start with a letter or digit.")
     if not title.strip():
@@ -49,6 +81,8 @@ def add_album(data_dir, media_dir, slug, title, folder, pin, theme="default", de
         "salt": salt,
         "hash": pin_hash,
     }
+    if secret:
+        albums[slug]["pin_encrypted"] = encrypt_album_pin(pin, secret)
     data_dir.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + f".{os.getpid()}.tmp")
     try:
@@ -76,7 +110,13 @@ def main(argv=None):
     media_dir = Path(os.environ.get("MEDIA", "/media"))
     try:
         pin = args.pin if args.pin is not None else getpass.getpass("Album PIN: ")
-        print(add_album(data_dir, media_dir, args.slug, args.title, args.folder, pin))
+        secret = os.environ.get("SECRET")
+        print(add_album(data_dir, media_dir, args.slug, args.title, args.folder, pin, secret=secret))
+        if not secret:
+            print(
+                "Warning: SECRET is not set; the PIN cannot be revealed from the admin panel.",
+                file=sys.stderr,
+            )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

@@ -295,8 +295,13 @@ Or continue using the SMB-based Windows CLI process above. The folder argument i
 command. Pick a unique PIN (preferably
 at least 8 random digits)
 and give it to the intended recipients through a private channel. The CLI
-stores only a salted scrypt hash in the data dataset. Running the command again
-for the same slug resets that album's title/PIN.
+stores a salted scrypt hash in the data dataset. PINs set through the web
+admin, or through the CLI when `SECRET` is configured, are also stored in
+authenticated encrypted form so the admin can reveal them. Keep `SECRET`
+unchanged and private; without it encrypted PINs cannot be recovered. Albums
+created before this feature have only a one-way hash, so their existing PINs
+remain valid but cannot be revealed without changing the PIN. Running the
+command again for the same slug resets that album's title/PIN.
 
 You can also create galleries and upload media from the web app. Open
 `https://YOUR_HOST/admin`, sign in, create a gallery, and leave the optional
@@ -369,8 +374,8 @@ sudo docker compose pull
 sudo docker compose up -d
 ```
 
-Keep the data dataset when upgrading: it contains album PIN hashes and
-favorites. The cache can be rebuilt by the worker if removed; the worker checks
+Keep the data dataset and the same `SECRET` when upgrading: it contains album
+PIN hashes, encrypted recoverable PINs, share links, and favorites. The cache can be rebuilt by the worker if removed; the worker checks
 for missing cached files and regenerates them.
 
 ## Supported media and limitations
