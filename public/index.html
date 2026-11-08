@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#090909">
 <title>fdmedia.studio — Galerie</title>
 <link rel="stylesheet" href="/vendor/photoswipe.css">
-<link rel="stylesheet" href="/static/style.css?v=1.0.0">
+<link rel="stylesheet" href="/static/style.css?v=1.1.0">
 </head>
 <body>
 <header class="top">
@@ -20,10 +20,14 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg>
       <span>Descarcă galeria ZIP</span>
     </a>
+    <a id="dlFavorites" class="action-btn" hidden>
+      <span>Descarcă favoritele</span><b id="favoriteDownloadCount">0</b>
+    </a>
   </nav>
 </header>
 <main>
   <section class="hero" id="hero" hidden aria-labelledby="title">
+    <div id="heroCover" class="hero-cover" hidden aria-hidden="true"><img id="coverImage" alt=""></div>
     <div class="hero-copy">
       <p class="eyebrow"><span class="eyebrow-dot"></span> GALERIE PRIVATĂ <span class="eyebrow-divider">/</span> FOTO &amp; VIDEO</p>
       <h1 id="title"></h1>
@@ -34,12 +38,33 @@
       <span class="count-label" id="countLabel">FOTOGRAFII</span>
     </div>
   </section>
+  <section id="galleryUpload" class="gallery-upload" hidden aria-label="Încarcă fotografii și videoclipuri">
+    <div class="gallery-upload-heading">
+      <div>
+        <p class="eyebrow">ADAUGĂ ÎN GALERIE</p>
+        <h2 id="galleryUploadTitle">Încarcă fotografii și videoclipuri</h2>
+        <p id="galleryUploadHelp">Trage fișierele aici sau selectează-le de pe dispozitiv.</p>
+      </div>
+      <button id="galleryUploadButton" class="action-btn action-primary" type="button">Alege fișiere</button>
+      <input id="galleryFileInput" type="file" accept="image/*,video/*,.cr2,.cr3,.nef,.arw,.dng,.raf,.orf,.rw2" multiple hidden>
+    </div>
+    <div id="galleryDropzone" class="gallery-dropzone" tabindex="0" role="button" aria-label="Trage fișiere pentru a le încărca">
+      <span class="drive-upload-icon" aria-hidden="true">↑</span>
+      <span><strong>Trage fișierele aici</strong> sau apasă „Alege fișiere”</span>
+    </div>
+    <p id="galleryUploadMessage" class="gallery-upload-message" role="status" aria-live="polite"></p>
+    <div id="galleryUploadProgress" class="drive-progress" hidden>
+      <div class="drive-progress-track"><span id="galleryUploadProgressBar"></span></div>
+      <span id="galleryUploadProgressLabel">Se încarcă...</span>
+    </div>
+  </section>
   <section class="gallery-section" aria-label="Fotografii și videoclipuri">
     <div class="gallery-heading">
       <span class="gallery-heading-title">POVEȘTILE VOASTRE</span>
       <span class="gallery-heading-line"></span>
       <span class="gallery-hint">Selectați o imagine pentru a o vizualiza</span>
     </div>
+    <nav id="sectionFilters" class="section-filters" aria-label="Filtrează după secțiune" hidden></nav>
     <p id="galleryNotice" class="gallery-notice" role="status" aria-live="polite"></p>
     <div id="grid" class="grid"></div>
     <div id="emptyState" class="empty-state" hidden>
@@ -77,6 +102,6 @@
     <p class="gate-footer">CAPTURĂM EMOȚIA PURĂ <span>·</span> FOTO &amp; VIDEO DE EVENIMENT</p>
   </div>
 </div>
-<script type="module" src="/static/app.js"></script>
+<script type="module" src="/static/app.js?v=1.1.0"></script>
 </body>
 </html>

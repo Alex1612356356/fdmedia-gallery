@@ -6,14 +6,17 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#090909">
 <title>Administrare galerii — fdmedia.studio</title>
-<link rel="stylesheet" href="/static/style.css?v=1.0.0">
+<link rel="stylesheet" href="/static/style.css?v=1.1.0">
 </head>
 <body class="admin-page">
 <header class="top">
   <a class="brand" href="https://fdmedia.studio" aria-label="FD Media Studios — site principal">
     <span class="brand-mark">FDM</span><span class="brand-caption">STUDIOS</span>
   </a>
-  <a class="action-btn" href="/">Înapoi la site</a>
+  <nav class="actions" aria-label="Navigare">
+    <a class="action-btn" href="/drive">Drive</a>
+    <a class="action-btn" href="/">Înapoi la site</a>
+  </nav>
 </header>
 <main class="admin-main">
   <section class="admin-intro">
@@ -39,20 +42,27 @@
       <div><p class="eyebrow">SPAȚIUL TĂU</p><h2>Galerii active</h2></div>
       <button id="adminLogout" class="action-btn" type="button">Ieșire</button>
     </div>
+    <section id="workerStatus" class="worker-status" aria-live="polite">
+      <p class="eyebrow">PROCESARE MEDIA</p>
+      <p id="workerStatusSummary">Se verifică starea workerului...</p>
+      <p id="workerStatusDetails" class="field-help"></p>
+      <p id="workerStatusError" class="field-help" role="status"></p>
+    </section>
     <div id="albumList" class="album-list" aria-live="polite"></div>
     <section class="admin-panel create-panel">
       <p class="eyebrow">O NOUĂ POVESTE</p>
       <h2>Creează o galerie</h2>
-      <p>Folderul trebuie să existe deja în directorul foto partajat cu aplicația.</p>
+      <p>Poți încărca fotografiile direct în galerie; folderul va fi creat automat.</p>
       <form id="createAlbumForm" class="admin-form">
         <label class="pin-label" for="albumTitle">NUMELE AFIȘAT CLIENȚILOR</label>
         <input id="albumTitle" name="title" maxlength="120" placeholder="Nuntă Ana & Mihai" required>
         <label class="pin-label" for="albumSlug">LINKUL GALERIEI</label>
         <div class="slug-field"><span>/g/</span><input id="albumSlug" name="slug" maxlength="63" pattern="[a-z0-9][a-z0-9-]{0,62}" placeholder="nunta-ana-mihai" required></div>
         <p class="field-help">Folosește litere mici, cifre și cratime. Linkul va fi /g/identificator.</p>
-        <label class="pin-label" for="albumFolder">FOLDERUL FOTO (RELATIV LA /media)</label>
-        <input id="albumFolder" name="folder" placeholder="evenimente/nunta-ana-mihai" required>
-        <p class="field-help">Exemplu: dacă fotografiile sunt în /media/evenimente/nunta, scrie evenimente/nunta.</p>
+        <label class="pin-label" for="albumFolder">FOLDER FOTO EXISTENT (OPȚIONAL)</label>
+        <input id="albumFolder" name="folder" placeholder="Lasă gol pentru a crea automat un folder nou">
+        <p class="field-help">Dacă lași câmpul gol, aplicația creează /media/identificatorul-galeriei. Pentru fotografii deja existente, poți indica folderul relativ la /media.</p>
+        <p class="field-help">Subfolderele din folderul galeriei devin automat secțiuni (de ex. „Ceremonie” și „Petrecere”). Fișierele puse direct în folder apar la „General”.</p>
         <label class="pin-label" for="albumTheme">TEMA GALERIEI</label>
         <select id="albumTheme" name="theme">
           <option value="default">Implicită</option>
@@ -65,6 +75,9 @@
         <label class="pin-label" for="albumDescription">DESCRIEREA GALERIEI (OPȚIONALĂ)</label>
         <textarea id="albumDescription" name="description" maxlength="500" rows="3" placeholder="Am păstrat aici momentele voastre. Bucurați-vă de ele."></textarea>
         <p class="field-help">Dacă lași câmpul gol, se va afișa descrierea implicită.</p>
+        <label class="pin-label" for="albumExpiresAt">EXPIRAREA ACCESULUI (OPȚIONALĂ)</label>
+        <input id="albumExpiresAt" name="expires_at" type="datetime-local">
+        <p class="field-help">Fără dată, galeria nu expiră. Data și ora sunt interpretate în fusul orar al dispozitivului tău.</p>
         <label class="pin-label" for="albumPin">PIN PENTRU CLIENȚI</label>
         <input id="albumPin" name="pin" type="password" inputmode="numeric" autocomplete="new-password" minlength="4" placeholder="Minimum 4 caractere" required>
         <button id="createAlbumButton" class="btn" type="submit"><span>Creează galeria</span></button>
@@ -73,6 +86,6 @@
     </section>
   </section>
 </main>
-<script type="module" src="/static/admin.js?v=1.0.0"></script>
+<script type="module" src="/static/admin.js?v=1.1.0"></script>
 </body>
 </html>

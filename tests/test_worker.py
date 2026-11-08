@@ -63,6 +63,27 @@ class WorkerTests(unittest.TestCase):
         index = json.loads((self.cache / "summer" / "index.json").read_text(encoding="utf-8"))
         self.assertEqual([item["n"] for item in index["items"]], ["photo.jpg", "second.jpg"])
 
+    def test_scan_indexes_nested_sections_and_reports_worker_status(self):
+        nested = self.media / "event" / "Ceremonie"
+        nested.mkdir()
+        Image.new("RGB", (800, 600), "purple").save(nested / "photo.jpg")
+
+        with patch.object(worker, "MEDIA", self.media), patch.object(worker, "CACHE", self.cache), patch.object(
+            worker, "DATA", self.data
+        ):
+            worker.scan_once()
+
+        index = json.loads((self.cache / "summer" / "index.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            [item["n"] for item in index["items"]],
+            ["Ceremonie/photo.jpg", "photo.jpg"],
+        )
+        self.assertTrue((self.cache / "summer" / "t" / "Ceremonie" / "photo.jpg.webp").is_file())
+        status = json.loads((self.data / "worker-status.json").read_text(encoding="utf-8"))
+        self.assertEqual(status["state"], "idle")
+        self.assertEqual(status["last_scan"] > 0, True)
+        self.assertEqual(status["total"], 2)
+
     def test_scan_stops_when_album_is_removed_during_processing(self):
         Image.new("RGB", (640, 480), "blue").save(self.media / "event" / "second.jpg")
 

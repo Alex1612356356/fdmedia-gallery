@@ -291,12 +291,31 @@ For this TrueNAS Compose deployment:
 sudo docker compose exec web python cli.py add wedding-2026 "Wedding 2026" wedding-2026
 ```
 
-Or continue using the SMB-based Windows CLI process above. The folder argument
-is relative to `/media` and must already exist. Pick a unique PIN (preferably
+Or continue using the SMB-based Windows CLI process above. The folder argument is relative to `/media` and must already exist for the CLI
+command. Pick a unique PIN (preferably
 at least 8 random digits)
 and give it to the intended recipients through a private channel. The CLI
 stores only a salted scrypt hash in the data dataset. Running the command again
 for the same slug resets that album's title/PIN.
+
+You can also create galleries and upload media from the web app. Open
+`https://YOUR_HOST/admin`, sign in, create a gallery, and leave the optional
+folder field blank to have the app create `/media/<gallery-slug>` automatically.
+Open the gallery, enter its PIN, and drag files into the upload area. The worker
+will process supported images, RAW files, and videos before they appear.
+The album's **Linkuri suplimentare** controls create separate links; each link
+can allow or block uploads independently, and visitors still need the gallery
+PIN. You can change a link's upload permission or revoke it from the admin page.
+
+For private file storage, open `https://YOUR_HOST/drive` and sign in with the
+same administrator password. FD Drive supports folders, multiple file uploads
+with progress, downloads, and permanent file deletion. Files are stored under
+`/data/drive` in the app data dataset and are separate from `/media`, so they
+are not automatically published in client galleries. Each upload request is
+limited to 10 GiB by default; set `MAX_DRIVE_UPLOAD_BYTES` on the web service
+to change the limit in bytes. Ensure the HTTPS reverse proxy also allows
+requests of that size. The app does not impose a storage quota, so available
+space is determined by the TrueNAS dataset.
 
 The gallery URL will be `https://YOUR_HOST/g/wedding-2026`. Allow a few minutes
 for the first scan and thumbnail generation. Check the worker logs if files are
@@ -331,6 +350,11 @@ public/internet-facing deployment.
 - Test a favorite, a full-size preview, a video if present, and an original download.
 - Download the gallery ZIP and verify it contains the original media files.
 - Sign in as administrator and confirm a photo deletion removes the original file.
+- Create a gallery without specifying a folder, upload a supported photo, and
+  verify the worker adds it to the gallery.
+- Create one view-only link and one upload-enabled link; verify both require the
+  gallery PIN and only the enabled link can upload.
+- Open `/drive`, create a folder, upload a file, and verify it can be downloaded.
 - In TrueNAS, check both service logs and confirm the worker reports processed
   files without permission or codec errors.
 
