@@ -11,10 +11,10 @@ The public source repository is
 GitHub Actions builds and publishes
 `ghcr.io/alex1612356356/fdmedia-gallery:latest` to GitHub Container Registry
 (GHCR). The image is public, so TrueNAS can pull it without registry credentials.
-The current numbered release is
-`ghcr.io/alex1612356356/fdmedia-gallery:v1.0.0`; use a numbered tag to pin an
-installation to a specific release. Every push to the default branch updates
-`latest`.
+The pinned image digest used in the deployment examples is
+`ghcr.io/alex1612356356/fdmedia-gallery@sha256:e5132af9a45ecde7c81e6ecd63da061c286b41481a9667fb3a42c49018d646d1`
+(commit `81e0102`). Pinning by digest keeps deployments on the exact same image
+even when branch tags such as `main` and `latest` move.
 
 ## What you need
 
@@ -93,7 +93,7 @@ TrueNAS pool. Replace both secret placeholders with the generated values.
 ```yaml
 services:
   web:
-    image: ghcr.io/alex1612356356/fdmedia-gallery:v1.0.0
+    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:e5132af9a45ecde7c81e6ecd63da061c286b41481a9667fb3a42c49018d646d1
     restart: unless-stopped
     user: "568:568"
     init: true
@@ -119,7 +119,7 @@ services:
       start_period: 20s
 
   worker:
-    image: ghcr.io/alex1612356356/fdmedia-gallery:v1.0.0
+    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:e5132af9a45ecde7c81e6ecd63da061c286b41481a9667fb3a42c49018d646d1
     restart: unless-stopped
     user: "568:568"
     init: true
@@ -175,13 +175,14 @@ access to `ghcr.io`. Check the app logs in **Apps → fdmedia-gallery → Worklo
 ## 4. Install with Docker Compose over SSH
 
 Alternatively, copy `docker-compose.yml` to TrueNAS and deploy it from a shell.
-The Compose file uses environment variables for the image and secrets. Copy it
-to a folder on TrueNAS, then open the TrueNAS Shell or connect over SSH and
-change into that folder. Create a private `.env` file:
+The Compose file pins the exact image digest; only the secrets are supplied as
+environment variables. Copy it to a folder on TrueNAS, then open the TrueNAS
+Shell or connect over SSH and change into that folder. Create a private `.env`
+file:
 
 ```sh
 umask 077
-printf 'IMAGE=ghcr.io/alex1612356356/fdmedia-gallery:v1.0.0\nGALLERY_SECRET=%s\nADMIN_PASSWORD=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
+printf 'GALLERY_SECRET=%s\nADMIN_PASSWORD=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
 ```
 
 Save the secret values securely. Edit `docker-compose.yml` and replace the
