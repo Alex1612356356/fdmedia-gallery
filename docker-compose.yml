@@ -1,7 +1,7 @@
 # Run from the TrueNAS shell or use this Compose file in the TrueNAS Apps YAML editor.
 services:
   web:
-    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:bcc8c31df1f61498613a5a3f9daf23bf09b4103de4c3ca9b358e8d92ffe217fc
+    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:0954e692c332e3600c5e53f85fa5458367ce24fa7234c3004e204aed30ce6a3c
     restart: unless-stopped
     user: "568:568"
     init: true
@@ -26,7 +26,7 @@ services:
       retries: 3
       start_period: 20s
   worker:
-    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:bcc8c31df1f61498613a5a3f9daf23bf09b4103de4c3ca9b358e8d92ffe217fc
+    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:0954e692c332e3600c5e53f85fa5458367ce24fa7234c3004e204aed30ce6a3c
     restart: unless-stopped
     user: "568:568"
     init: true
