@@ -311,9 +311,8 @@ You can also create galleries and upload media from the web app. Open
 folder field blank to have the app create `/media/<gallery-slug>` automatically.
 Open the gallery, enter its PIN, and drag files into the upload area. The worker
 will process supported images, RAW files, and videos before they appear. The
-gallery automatically chooses low, medium, or high image/video renditions using
-browser connection hints and measured media download speeds. The worker creates
-640/1280/2560-pixel photo renditions and 360p/720p/1080p video renditions.
+gallery displays full-size photo renditions and a fixed 720p video rendition;
+it does not inspect network speed or switch media quality.
 The album's **Linkuri suplimentare** controls create separate links; each link
 can allow or block uploads independently, and visitors still need the gallery
 PIN. You can change a link's upload permission or revoke it from the admin page.

@@ -1117,53 +1117,21 @@ def create_app(
         item = next((i for i in index_for(slug)["items"] if isinstance(i, dict) and i.get("n") == name), None)
         if item is None:
             abort(404)
-        if kind in ("t", "m", "l", "p", "v", "v360", "v1080"):
+        if kind in ("t", "l", "p", "v"):
             relative_name = _media_relative_path(name)
             if relative_name is None:
                 abort(404)
-            subdir = {
-                "t": "t",
-                "m": "m",
-                "l": "l",
-                "p": "l",
-                "v": "v",
-                "v360": "v360",
-                "v1080": "v1080",
-            }[kind]
+            subdir = {"t": "t", "l": "l", "p": "l", "v": "v"}[kind]
             suffix = ".mp4" if kind.startswith("v") else ".webp"
             file_path = cache_dir / slug / subdir / Path(*relative_name.parts[:-1]) / f"{relative_name.name}{suffix}"
-            used_fallback = False
-            if kind.startswith("v") and item.get("type") == "video" and not file_path.is_file():
-                fallback_kinds = {
-                    "v360": ("v", "v1080"),
-                    "v": ("v360", "v1080"),
-                    "v1080": ("v", "v360"),
-                }[kind]
-                for fallback_kind in fallback_kinds:
-                    fallback_path = (
-                        cache_dir
-                        / slug
-                        / fallback_kind
-                        / Path(*relative_name.parts[:-1])
-                        / f"{relative_name.name}.mp4"
-                    )
-                    if fallback_path.is_file():
-                        file_path = fallback_path
-                        used_fallback = True
-                        break
         elif kind == "o":
             file_path = album_source_file(album, name)
-            used_fallback = False
         else:
             abort(404)
         if not file_path.is_file():
             abort(404)
         response = send_file(file_path, conditional=True, as_attachment=kind == "o", download_name=name if kind == "o" else None)
-        response.headers["Cache-Control"] = (
-            "private, no-store"
-            if kind == "o" or used_fallback
-            else "private, max-age=31536000, immutable"
-        )
+        response.headers["Cache-Control"] = "private, no-store" if kind == "o" else "private, max-age=31536000, immutable"
         return response
 
     @app.errorhandler(413)

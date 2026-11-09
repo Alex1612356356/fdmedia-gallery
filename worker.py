@@ -166,50 +166,44 @@ def process_media(source, slug, name, kind):
     root = CACHE / slug
     relative_name = Path(*Path(name).parts)
     thumbnail = root / "t" / relative_name.with_name(f"{relative_name.name}.webp")
-    medium = root / "m" / relative_name.with_name(f"{relative_name.name}.webp")
     large = root / "l" / relative_name.with_name(f"{relative_name.name}.webp")
     if kind == "video":
         poster = root / "tmp" / relative_name.with_name(f"{relative_name.name}.jpg")
+        video = root / "v" / relative_name.with_name(f"{relative_name.name}.mp4")
         poster.parent.mkdir(parents=True, exist_ok=True)
+        video.parent.mkdir(parents=True, exist_ok=True)
         try:
             run_ffmpeg(["-ss", "1", "-i", str(source), "-frames:v", "1", str(poster)], slug)
         except (OSError, subprocess.SubprocessError):
             run_ffmpeg(["-i", str(source), "-frames:v", "1", str(poster)], slug)
-        for height, directory, quality in (
-            (360, "v360", "28"),
-            (720, "v", "26"),
-            (1080, "v1080", "24"),
-        ):
-            video = root / directory / relative_name.with_name(f"{relative_name.name}.mp4")
-            video.parent.mkdir(parents=True, exist_ok=True)
-            run_ffmpeg(
-                [
-                    "-i",
-                    str(source),
-                    "-map",
-                    "0:v:0",
-                    "-map",
-                    "0:a:0?",
-                    "-sn",
-                    "-dn",
-                    "-vf",
-                    f"scale=-2:min(ih\\,{height}):force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
-                    "-c:v",
-                    "libx264",
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-crf",
-                    quality,
-                    "-preset",
-                    "veryfast",
-                    "-c:a",
-                    "aac",
-                    "-movflags",
-                    "+faststart",
-                    str(video),
-                ],
-                slug,
-            )
+        run_ffmpeg(
+            [
+                "-i",
+                str(source),
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0?",
+                "-sn",
+                "-dn",
+                "-vf",
+                "scale=-2:720:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-crf",
+                "26",
+                "-preset",
+                "veryfast",
+                "-c:a",
+                "aac",
+                "-movflags",
+                "+faststart",
+                str(video),
+            ],
+            slug,
+        )
         image_source = poster
     elif kind == "raw":
         image_source = extract_raw_preview(source)
@@ -217,7 +211,6 @@ def process_media(source, slug, name, kind):
         image_source = source
 
     large_width, large_height = make_webp(image_source, large, 2560, 82)
-    make_webp(image_source, medium, 1280, 78)
     make_webp(image_source, thumbnail, 640, 72)
     return {"w": large_width, "h": large_height}
 
@@ -231,8 +224,6 @@ def cache_is_complete(root, name, kind):
     ]
     if kind == "video":
         expected.append(root / "v" / relative_name.with_name(f"{relative_name.name}.mp4"))
-        expected.append(root / "v360" / relative_name.with_name(f"{relative_name.name}.mp4"))
-        expected.append(root / "v1080" / relative_name.with_name(f"{relative_name.name}.mp4"))
     return all(file.is_file() and file.stat().st_size > 0 for file in expected)
 
 
