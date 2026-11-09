@@ -12,7 +12,7 @@ GitHub Actions builds and publishes
 `ghcr.io/alex1612356356/fdmedia-gallery:latest` to GitHub Container Registry
 (GHCR). The image is public, so TrueNAS can pull it without registry credentials.
 The pinned image digest used in the deployment examples is
-`ghcr.io/alex1612356356/fdmedia-gallery@sha256:0954e692c332e3600c5e53f85fa5458367ce24fa7234c3004e204aed30ce6a3c`
+`ghcr.io/alex1612356356/fdmedia-gallery@sha256:3cb9184f43685099f86835b822cd6947d6358a3d78c4c1bf8038f9dd453453d5`
 (commit `7d2470c`). Pinning by digest keeps deployments on the exact same image
 even when branch tags such as `main` and `latest` move. When changing the
 Compose image, pull the image and recreate both services; editing the YAML
@@ -95,7 +95,7 @@ TrueNAS pool. Replace both secret placeholders with the generated values.
 ```yaml
 services:
   web:
-    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:0954e692c332e3600c5e53f85fa5458367ce24fa7234c3004e204aed30ce6a3c
+    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:3cb9184f43685099f86835b822cd6947d6358a3d78c4c1bf8038f9dd453453d5
     restart: unless-stopped
     user: "568:568"
     init: true
@@ -121,7 +121,7 @@ services:
       start_period: 20s
 
   worker:
-    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:0954e692c332e3600c5e53f85fa5458367ce24fa7234c3004e204aed30ce6a3c
+    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:3cb9184f43685099f86835b822cd6947d6358a3d78c4c1bf8038f9dd453453d5
     restart: unless-stopped
     user: "568:568"
     init: true
