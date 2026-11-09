@@ -1132,15 +1132,37 @@ def create_app(
             }[kind]
             suffix = ".mp4" if kind.startswith("v") else ".webp"
             file_path = cache_dir / slug / subdir / Path(*relative_name.parts[:-1]) / f"{relative_name.name}{suffix}"
+            used_fallback = False
+            if kind.startswith("v") and item.get("type") == "video" and not file_path.is_file():
+                fallback_kinds = {
+                    "v360": ("v", "v1080"),
+                    "v": ("v360", "v1080"),
+                    "v1080": ("v", "v360"),
+                }[kind]
+                for fallback_kind in fallback_kinds:
+                    fallback_path = (
+                        cache_dir
+                        / slug
+                        / fallback_kind
+                        / Path(*relative_name.parts[:-1])
+                        / f"{relative_name.name}.mp4"
+                    )
+                    if fallback_path.is_file():
+                        file_path = fallback_path
+                        used_fallback = True
+                        break
         elif kind == "o":
             file_path = album_source_file(album, name)
+            used_fallback = False
         else:
             abort(404)
         if not file_path.is_file():
             abort(404)
         response = send_file(file_path, conditional=True, as_attachment=kind == "o", download_name=name if kind == "o" else None)
         response.headers["Cache-Control"] = (
-            "private, no-store" if kind == "o" else "private, max-age=31536000, immutable"
+            "private, no-store"
+            if kind == "o" or used_fallback
+            else "private, max-age=31536000, immutable"
         )
         return response
 

@@ -91,6 +91,23 @@ class GalleryAppTests(unittest.TestCase):
                 self.assertEqual(response.data, expected)
                 response.close()
 
+    def test_video_uses_available_rendition_when_selected_quality_is_missing(self):
+        index_path = self.cache / "event-one" / "index.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["items"].append({"n": "clip.mp4", "type": "video", "w": 640, "h": 360})
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        rendition = self.cache / "event-one" / "v" / "clip.mp4.mp4"
+        rendition.parent.mkdir(parents=True)
+        rendition.write_bytes(b"available-medium-video")
+
+        self.client.post("/api/event-one/login", json={"pin": "12345678"})
+        response = self.client.get("/m/event-one/v1080/clip.mp4")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, b"available-medium-video")
+        self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+        response.close()
+
     def test_admin_delete_removes_all_adaptive_media_renditions(self):
         admin_app = create_app(
             data_dir=self.data,
