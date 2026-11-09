@@ -68,6 +68,65 @@ class GalleryAppTests(unittest.TestCase):
         self.assertIn("attachment", response.headers["Content-Disposition"])
         response.close()
 
+    def test_gallery_serves_medium_images_and_adaptive_video_renditions(self):
+        index_path = self.cache / "event-one" / "index.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["items"].append({"n": "clip.mp4", "type": "video", "w": 640, "h": 360})
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        for directory in ("m", "v360", "v", "v1080"):
+            path = self.cache / "event-one" / directory / ("clip.mp4.mp4" if directory.startswith("v") else "photo one.jpg.webp")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(directory.encode("ascii"))
+
+        self.client.post("/api/event-one/login", json={"pin": "12345678"})
+        for kind, name, expected in (
+            ("m", "photo one.jpg", b"m"),
+            ("v360", "clip.mp4", b"v360"),
+            ("v", "clip.mp4", b"v"),
+            ("v1080", "clip.mp4", b"v1080"),
+        ):
+            with self.subTest(kind=kind):
+                response = self.client.get(f"/m/event-one/{kind}/{name}")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.data, expected)
+                response.close()
+
+    def test_admin_delete_removes_all_adaptive_media_renditions(self):
+        admin_app = create_app(
+            data_dir=self.data,
+            cache_dir=self.cache,
+            media_dir=self.media,
+            secret="test-secret-that-is-at-least-32-bytes",
+            admin_password="admin-password-for-tests-at-least-24",
+            cookie_secure=False,
+        )
+        admin = admin_app.test_client()
+        admin.post("/api/admin/login", json={"password": "admin-password-for-tests-at-least-24"})
+        for directory, suffix in (
+            ("m", ".webp"),
+            ("v360", ".mp4"),
+            ("v", ".mp4"),
+            ("v1080", ".mp4"),
+        ):
+            path = self.cache / "event-one" / directory / f"photo one.jpg{suffix}"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"rendition")
+
+        response = admin.delete(
+            "/api/admin/albums/event-one/items",
+            json={"name": "photo one.jpg"},
+        )
+        self.assertEqual(response.status_code, 200)
+        for directory, suffix in (
+            ("m", ".webp"),
+            ("v360", ".mp4"),
+            ("v", ".mp4"),
+            ("v1080", ".mp4"),
+        ):
+            self.assertFalse(
+                (self.cache / "event-one" / directory / f"photo one.jpg{suffix}").exists()
+            )
+
     def test_malformed_or_wrong_length_cookie_is_unauthorized(self):
         for cookie in ("fd_event-one=1.x", "fd_event-one=1." + "a" * 10000, "fd_event-one=not-a-token"):
             response = self.client.get("/api/event-one/items", headers={"Cookie": cookie})

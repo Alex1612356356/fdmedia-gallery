@@ -35,6 +35,7 @@ class WorkerTests(unittest.TestCase):
             index = json.loads((root / "index.json").read_text(encoding="utf-8"))
             self.assertEqual([item["n"] for item in index["items"]], ["photo.jpg"])
             self.assertEqual((root / "l" / "photo.jpg.webp").is_file(), True)
+            self.assertEqual((root / "m" / "photo.jpg.webp").is_file(), True)
             self.assertEqual((root / "t" / "photo.jpg.webp").is_file(), True)
 
             Image.new("RGB", (640, 480), "blue").save(self.media / "event" / "new-photo.jpg")
@@ -42,6 +43,7 @@ class WorkerTests(unittest.TestCase):
             worker.scan_once()
             index = json.loads((root / "index.json").read_text(encoding="utf-8"))
             self.assertEqual([item["n"] for item in index["items"]], ["new-photo.jpg", "photo.jpg"])
+            self.assertTrue((root / "m" / "new-photo.jpg.webp").is_file())
             self.assertTrue((root / "t" / "new-photo.jpg.webp").is_file())
             self.assertTrue((root / "t" / "photo.jpg.webp").is_file())
 
@@ -122,15 +124,19 @@ class WorkerTests(unittest.TestCase):
         ):
             worker.process_media(source, "summer", source.name, "video")
 
-        transcode_args = run_ffmpeg.call_args_list[1].args[0]
+        self.assertEqual(run_ffmpeg.call_count, 4)
+        rendition_args = [call.args[0] for call in run_ffmpeg.call_args_list[1:]]
+        transcode_args = rendition_args[1]
         self.assertIn("0:v:0", transcode_args)
         self.assertIn("0:a:0?", transcode_args)
         self.assertIn("yuv420p", transcode_args)
         self.assertIn("libx264", transcode_args)
         self.assertIn(
-            "scale=-2:720:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+            "scale=-2:min(ih\\,720):force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
             transcode_args,
         )
+        self.assertTrue(any("v360" in arg for arg in rendition_args[0]))
+        self.assertTrue(any("v1080" in arg for arg in rendition_args[2]))
 
 
 if __name__ == "__main__":

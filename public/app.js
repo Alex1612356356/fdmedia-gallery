@@ -5,12 +5,70 @@ let items = [], favs = new Set(), onlyFav = false, isAdmin = false, sections = [
 let uploadAllowed = false;
 const shareLink = new URLSearchParams(location.search).get('link');
 let imageObserver;
+const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+const qualityRank = { low: 0, medium: 1, high: 2 };
+let adaptiveQuality = initialQuality();
+let measuredDownlink = null;
+let measuredSamples = 0;
 const api = (p, o = {}) => {
   const endpoint = new URL(`/api/${encodeURIComponent(slug)}/${p}`, location.origin);
   if (shareLink) endpoint.searchParams.set('link', shareLink);
   return fetch(endpoint, { credentials: 'same-origin', cache: 'no-store', ...o });
 };
 const url = (k, n, m) => `/m/${slug}/${k}/${encodeURIComponent(n)}${m === undefined ? '' : `?v=${encodeURIComponent(m)}`}`;
+
+function qualityForDownlink(mbps) {
+  if (mbps < 0.7) return 'low';
+  if (mbps < 2.5) return 'medium';
+  return 'high';
+}
+
+function initialQuality() {
+  if (connection?.saveData || ['slow-2g', '2g'].includes(connection?.effectiveType)) return 'low';
+  if (connection?.effectiveType === '3g') return 'medium';
+  if (Number.isFinite(connection?.downlink)) return qualityForDownlink(connection.downlink);
+  return 'medium';
+}
+
+function imageRendition() {
+  return { low: 't', medium: 'm', high: 'l' }[adaptiveQuality];
+}
+
+function videoRendition() {
+  return { low: 'v360', medium: 'v', high: 'v1080' }[adaptiveQuality];
+}
+
+function updateMediaLinks() {
+  grid.querySelectorAll('.ph-link').forEach(link => {
+    const item = visible()[Number(link.dataset.i)];
+    if (!item) return;
+    link.href = url(item.type === 'video' ? videoRendition() : imageRendition(), item.n, item.m);
+  });
+}
+
+function applyMeasuredDownlink(image) {
+  const entries = performance.getEntriesByName(image.currentSrc || image.src);
+  const entry = entries[entries.length - 1];
+  if (!entry || entry.transferSize < 16 * 1024) return;
+  const transferDuration = entry.responseEnd - entry.responseStart;
+  if (transferDuration < 50) return;
+  const sample = entry.transferSize * 8 / (transferDuration * 1000);
+  measuredDownlink = measuredDownlink === null ? sample : measuredDownlink * 0.65 + sample * 0.35;
+  measuredSamples += 1;
+  if (measuredSamples < 2) return;
+  const nextQuality = qualityForDownlink(measuredDownlink);
+  if (nextQuality !== adaptiveQuality) {
+    adaptiveQuality = nextQuality;
+    updateMediaLinks();
+  }
+}
+
+connection?.addEventListener?.('change', () => {
+  if (measuredSamples < 2) {
+    adaptiveQuality = initialQuality();
+    updateMediaLinks();
+  }
+});
 
 function updateUploadPanel() {
   const enabled = isAdmin || uploadAllowed;
@@ -221,8 +279,11 @@ function render() {
   imageObserver = new IntersectionObserver(es => es.forEach(e => {
     if (!e.isIntersecting) return;
     const img = e.target;
+    img.onload = () => {
+      img.classList.add('in');
+      applyMeasuredDownlink(img);
+    };
     img.src = img.dataset.src;
-    img.onload = () => img.classList.add('in');
     imageObserver.unobserve(img);
   }), { rootMargin: '600px' });
   const empty = list.length === 0;
@@ -239,7 +300,7 @@ function render() {
     const link = document.createElement('a');
     link.className = 'ph-link';
     link.dataset.i = i;
-    link.href = it.type === 'video' ? url('v', it.n, it.m) : url('l', it.n, it.m);
+    link.href = url(it.type === 'video' ? videoRendition() : imageRendition(), it.n, it.m);
     link.dataset.pswpWidth = it.w; link.dataset.pswpHeight = it.h;
     const image = document.createElement('img');
     image.alt = it.type === 'video' ? `Previzualizare videoclip: ${it.n}` : `Fotografie: ${it.n}`;
@@ -344,7 +405,7 @@ function initLightbox() {
   });
   // Video slides
   lb.addFilter('itemData', d => { const it = visible()[+d.element?.dataset.i]; if (it?.type === 'video')
-    return { ...d, type: 'video', videoSrc: url('v', it.n, it.m), poster: url('p', it.n, it.m) }; return d; });
+    return { ...d, type: 'video', videoSrc: url(videoRendition(), it.n, it.m), poster: url(imageRendition(), it.n, it.m) }; return d; });
   lb.on('contentLoad', e => { const { content } = e; if (content.data.type !== 'video') return; e.preventDefault();
     content.element = Object.assign(document.createElement('video'), { className: 'pswp__video', controls: true, playsInline: true, preload: 'metadata', poster: content.data.poster, src: content.data.videoSrc });
     content.onLoaded(); });

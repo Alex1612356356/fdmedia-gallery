@@ -1095,8 +1095,11 @@ def create_app(
                     abort(404)
                 for relative_path in (
                     Path("t", *relative_name.parts[:-1]) / f"{relative_name.name}.webp",
+                    Path("m", *relative_name.parts[:-1]) / f"{relative_name.name}.webp",
                     Path("l", *relative_name.parts[:-1]) / f"{relative_name.name}.webp",
                     Path("v", *relative_name.parts[:-1]) / f"{relative_name.name}.mp4",
+                    Path("v360", *relative_name.parts[:-1]) / f"{relative_name.name}.mp4",
+                    Path("v1080", *relative_name.parts[:-1]) / f"{relative_name.name}.mp4",
                     Path("tmp", *relative_name.parts[:-1]) / f"{relative_name.name}.jpg",
                 ):
                     (cache_root / relative_path).unlink(missing_ok=True)
@@ -1114,12 +1117,20 @@ def create_app(
         item = next((i for i in index_for(slug)["items"] if isinstance(i, dict) and i.get("n") == name), None)
         if item is None:
             abort(404)
-        if kind in ("t", "l", "p", "v"):
+        if kind in ("t", "m", "l", "p", "v", "v360", "v1080"):
             relative_name = _media_relative_path(name)
             if relative_name is None:
                 abort(404)
-            subdir = {"t": "t", "l": "l", "p": "l", "v": "v"}[kind]
-            suffix = ".mp4" if kind == "v" else ".webp"
+            subdir = {
+                "t": "t",
+                "m": "m",
+                "l": "l",
+                "p": "l",
+                "v": "v",
+                "v360": "v360",
+                "v1080": "v1080",
+            }[kind]
+            suffix = ".mp4" if kind.startswith("v") else ".webp"
             file_path = cache_dir / slug / subdir / Path(*relative_name.parts[:-1]) / f"{relative_name.name}{suffix}"
         elif kind == "o":
             file_path = album_source_file(album, name)

@@ -12,9 +12,11 @@ GitHub Actions builds and publishes
 `ghcr.io/alex1612356356/fdmedia-gallery:latest` to GitHub Container Registry
 (GHCR). The image is public, so TrueNAS can pull it without registry credentials.
 The pinned image digest used in the deployment examples is
-`ghcr.io/alex1612356356/fdmedia-gallery@sha256:e5132af9a45ecde7c81e6ecd63da061c286b41481a9667fb3a42c49018d646d1`
-(commit `81e0102`). Pinning by digest keeps deployments on the exact same image
-even when branch tags such as `main` and `latest` move.
+`ghcr.io/alex1612356356/fdmedia-gallery@sha256:bcc8c31df1f61498613a5a3f9daf23bf09b4103de4c3ca9b358e8d92ffe217fc`
+(commit `7f07886`). Pinning by digest keeps deployments on the exact same image
+even when branch tags such as `main` and `latest` move. When changing the
+Compose image, pull the image and recreate both services; editing the YAML
+alone does not update already-running containers.
 
 ## What you need
 
@@ -93,7 +95,7 @@ TrueNAS pool. Replace both secret placeholders with the generated values.
 ```yaml
 services:
   web:
-    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:e5132af9a45ecde7c81e6ecd63da061c286b41481a9667fb3a42c49018d646d1
+    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:bcc8c31df1f61498613a5a3f9daf23bf09b4103de4c3ca9b358e8d92ffe217fc
     restart: unless-stopped
     user: "568:568"
     init: true
@@ -119,7 +121,7 @@ services:
       start_period: 20s
 
   worker:
-    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:e5132af9a45ecde7c81e6ecd63da061c286b41481a9667fb3a42c49018d646d1
+    image: ghcr.io/alex1612356356/fdmedia-gallery@sha256:bcc8c31df1f61498613a5a3f9daf23bf09b4103de4c3ca9b358e8d92ffe217fc
     restart: unless-stopped
     user: "568:568"
     init: true
@@ -191,7 +193,7 @@ example host paths with your dataset paths. Then validate and start the app:
 ```sh
 sudo docker compose config --quiet
 sudo docker compose pull
-sudo docker compose up -d
+sudo docker compose up -d --force-recreate
 sudo docker compose ps
 sudo docker compose logs --tail=100 web worker
 ```
@@ -308,7 +310,10 @@ You can also create galleries and upload media from the web app. Open
 `https://YOUR_HOST/admin`, sign in, create a gallery, and leave the optional
 folder field blank to have the app create `/media/<gallery-slug>` automatically.
 Open the gallery, enter its PIN, and drag files into the upload area. The worker
-will process supported images, RAW files, and videos before they appear.
+will process supported images, RAW files, and videos before they appear. The
+gallery automatically chooses low, medium, or high image/video renditions using
+browser connection hints and measured media download speeds. The worker creates
+640/1280/2560-pixel photo renditions and 360p/720p/1080p video renditions.
 The album's **Linkuri suplimentare** controls create separate links; each link
 can allow or block uploads independently, and visitors still need the gallery
 PIN. You can change a link's upload permission or revoke it from the admin page.
