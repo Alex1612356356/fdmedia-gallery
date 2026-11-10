@@ -45,6 +45,7 @@ class DriveTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/admin/drive").status_code, 401)
         self.assertEqual(self.client.post("/api/admin/drive/folders", json={"name": "Private"}).status_code, 401)
         self.assertEqual(self.client.get("/api/admin/drive/download?path=private.txt").status_code, 401)
+        self.assertEqual(self.client.get("/api/admin/drive/preview?path=private.jpg").status_code, 401)
         self.assertEqual(self.client.delete("/api/admin/drive", json={"path": "private.txt"}).status_code, 401)
 
     def test_create_list_upload_download_and_delete_files(self):
@@ -150,6 +151,26 @@ class DriveTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/admin/drive/download?path=escape").status_code, 400)
         self.assertEqual(self.client.get("/api/admin/drive").json["items"], [])
         self.assertEqual(outside.read_text(encoding="utf-8"), "private")
+
+    def test_image_preview_is_private_and_rejects_non_images(self):
+        self.login()
+        image = self.data / "drive" / "preview.jpg"
+        image.write_bytes(b"image-data")
+
+        response = self.client.get("/api/admin/drive/preview?path=preview.jpg")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "image/jpeg")
+        self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+        self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(response.data, b"image-data")
+        response.close()
+
+        text = self.data / "drive" / "notes.txt"
+        text.write_text("private", encoding="utf-8")
+        self.assertEqual(
+            self.client.get("/api/admin/drive/preview?path=notes.txt").status_code,
+            415,
+        )
 
 
 if __name__ == "__main__":

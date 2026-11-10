@@ -482,6 +482,30 @@ def create_app(
         ]
         return jsonify(sorted(result, key=lambda album: album["title"].casefold()))
 
+    @app.get("/api/admin/media-folders")
+    @require_admin
+    def admin_media_folders():
+        if not media_dir.is_dir():
+            log.error("Media folder is not available: %s", media_dir)
+            return jsonify(error="Folderul foto nu este disponibil."), 500
+        folders = []
+        pending = [media_dir]
+        try:
+            while pending:
+                parent = pending.pop()
+                with os.scandir(parent) as entries:
+                    for entry in entries:
+                        if entry.is_dir(follow_symlinks=False):
+                            folder = Path(entry.path)
+                            folders.append(folder.relative_to(media_dir).as_posix())
+                            pending.append(folder)
+        except OSError:
+            log.exception("Could not list media folders in %s", media_dir)
+            return jsonify(error="Nu am putut citi folderele foto."), 500
+        response = jsonify(folders=sorted(folders, key=str.casefold))
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
+
     @app.post("/api/admin/albums")
     @require_admin
     def admin_create_album():
@@ -801,6 +825,30 @@ def create_app(
         if not file_path.is_file():
             return jsonify(error="Fișierul nu a fost găsit."), 404
         response = send_file(file_path, as_attachment=True, download_name=file_path.name, conditional=True)
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    @app.get("/api/admin/drive/preview")
+    @require_admin
+    def admin_drive_preview():
+        relative = request.args.get("path", "")
+        file_path = drive_path(relative)
+        if file_path is None:
+            return jsonify(error="Calea fișierului nu este validă."), 400
+        if not file_path.is_file():
+            return jsonify(error="Fișierul nu a fost găsit."), 404
+        mimetype = {
+            ".avif": "image/avif",
+            ".gif": "image/gif",
+            ".jpeg": "image/jpeg",
+            ".jpg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
+        }.get(file_path.suffix.casefold())
+        if mimetype is None:
+            return jsonify(error="Previzualizarea nu este disponibilă pentru acest tip de fișier."), 415
+        response = send_file(file_path, mimetype=mimetype, conditional=True)
         response.headers["Cache-Control"] = "private, no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response

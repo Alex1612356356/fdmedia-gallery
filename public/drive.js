@@ -44,6 +44,7 @@ function renderBreadcrumbs() {
   const parts = currentFolder ? currentFolder.split('/') : [];
   const locations = [{ name: 'Drive-ul meu', path: '' }];
   parts.forEach((name, index) => locations.push({ name, path: parts.slice(0, index + 1).join('/') }));
+  $('#driveCurrentTitle').textContent = parts.length ? parts[parts.length - 1] : 'Bun venit în FD Drive';
   locations.forEach((location, index) => {
     if (index) {
       const separator = document.createElement('span');
@@ -60,49 +61,119 @@ function renderBreadcrumbs() {
   });
 }
 
-function renderItems() {
-  const body = $('#driveItems');
-  const query = $('#driveSearch').value.trim().toLocaleLowerCase('ro-RO');
-  const filtered = items.filter(item => item.name.toLocaleLowerCase('ro-RO').includes(query));
-  body.replaceChildren();
-  $('#driveEmpty').hidden = filtered.length !== 0;
-  filtered.forEach(item => {
-    const row = document.createElement('tr');
-    const nameCell = document.createElement('td');
-    const name = document.createElement('button');
-    name.className = `drive-item-name${item.type === 'folder' ? ' drive-folder-name' : ''}`;
-    name.type = 'button';
-    name.textContent = `${item.type === 'folder' ? '▰' : '▤'}  ${item.name}`;
-    name.title = item.name;
-    if (item.type === 'folder') {
-      name.addEventListener('click', () => openFolder(currentFolder ? `${currentFolder}/${item.name}` : item.name));
-    } else {
-      name.disabled = true;
-    }
-    nameCell.append(name);
+function createFolderCard(item) {
+  const card = document.createElement('button');
+  card.className = 'drive-folder-card';
+  card.type = 'button';
+  card.title = item.name;
+  const icon = document.createElement('span');
+  icon.className = 'drive-folder-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = '▰';
+  const name = document.createElement('span');
+  name.className = 'drive-folder-title';
+  name.textContent = item.name;
+  const arrow = document.createElement('span');
+  arrow.className = 'drive-folder-arrow';
+  arrow.setAttribute('aria-hidden', 'true');
+  arrow.textContent = '›';
+  card.append(icon, name, arrow);
+  card.addEventListener('click', () => openFolder(currentFolder ? `${currentFolder}/${item.name}` : item.name));
+  return card;
+}
 
-    const dateCell = document.createElement('td');
-    dateCell.textContent = formatDate(item.modified);
-    const sizeCell = document.createElement('td');
-    sizeCell.textContent = item.type === 'file' ? formatSize(item.size) : '—';
-    const actionsCell = document.createElement('td');
-    actionsCell.className = 'drive-row-actions';
-    if (item.type === 'file') {
-      const path = currentFolder ? `${currentFolder}/${item.name}` : item.name;
-      const download = document.createElement('a');
-      download.className = 'drive-row-action';
-      download.href = `/api/admin/drive/download?path=${encodeURIComponent(path)}`;
-      download.textContent = 'Descarcă';
-      const remove = document.createElement('button');
-      remove.className = 'drive-row-action drive-delete';
-      remove.type = 'button';
-      remove.textContent = 'Șterge';
-      remove.addEventListener('click', () => deleteFile(path, item.name, remove));
-      actionsCell.append(download, remove);
-    }
-    row.append(nameCell, dateCell, sizeCell, actionsCell);
-    body.append(row);
+function fileType(name) {
+  const extension = name.split('.').pop().toLocaleLowerCase('ro-RO');
+  if (['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif'].includes(extension)) return { label: extension.toUpperCase(), kind: 'image', preview: true };
+  if (['mp4', 'mov', 'mkv', 'm4v', 'avi'].includes(extension)) return { label: 'VIDEO', kind: 'video', preview: false };
+  if (extension === 'pdf') return { label: 'PDF', kind: 'pdf', preview: false };
+  if (['doc', 'docx', 'odt', 'rtf', 'txt'].includes(extension)) return { label: 'DOC', kind: 'document', preview: false };
+  if (['zip', '7z', 'rar', 'tar', 'gz'].includes(extension)) return { label: 'ZIP', kind: 'archive', preview: false };
+  return { label: extension && extension !== name ? extension.slice(0, 5).toUpperCase() : 'FILE', kind: 'generic', preview: false };
+}
+
+function createFileCard(item) {
+  const card = document.createElement('article');
+  card.className = 'drive-file-card';
+  const heading = document.createElement('div');
+  heading.className = 'drive-file-heading';
+  const type = fileType(item.name);
+  const icon = document.createElement('span');
+  icon.className = `drive-file-icon drive-file-icon-${type.kind}`;
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = type.label;
+  const name = document.createElement('span');
+  name.className = 'drive-file-name';
+  name.textContent = item.name;
+  name.title = item.name;
+
+  const path = currentFolder ? `${currentFolder}/${item.name}` : item.name;
+  const menu = document.createElement('details');
+  menu.className = 'drive-file-menu';
+  const menuToggle = document.createElement('summary');
+  menuToggle.textContent = '⋮';
+  menuToggle.setAttribute('aria-label', `Acțiuni pentru ${item.name}`);
+  const menuItems = document.createElement('div');
+  menuItems.className = 'drive-file-menu-items';
+  const download = document.createElement('a');
+  download.href = `/api/admin/drive/download?path=${encodeURIComponent(path)}`;
+  download.textContent = 'Descarcă';
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'drive-delete';
+  remove.textContent = 'Șterge';
+  remove.addEventListener('click', () => deleteFile(path, item.name, remove));
+  menuItems.append(download, remove);
+  menu.append(menuToggle, menuItems);
+  heading.append(icon, name, menu);
+
+  const preview = document.createElement('a');
+  preview.className = `drive-file-preview drive-file-preview-${type.kind}`;
+  preview.href = download.href;
+  preview.setAttribute('aria-label', `Descarcă ${item.name}`);
+  if (type.preview) {
+    const image = document.createElement('img');
+    image.src = `/api/admin/drive/preview?path=${encodeURIComponent(path)}`;
+    image.alt = '';
+    image.loading = 'lazy';
+    preview.append(image);
+  } else {
+    const previewIcon = document.createElement('span');
+    previewIcon.className = `drive-preview-symbol drive-preview-symbol-${type.kind}`;
+    previewIcon.setAttribute('aria-hidden', 'true');
+    previewIcon.textContent = type.label;
+    preview.append(previewIcon);
+  }
+
+  const metadata = document.createElement('div');
+  metadata.className = 'drive-file-meta';
+  const modified = document.createElement('span');
+  modified.textContent = `Modificat ${formatDate(item.modified)}`;
+  const size = document.createElement('span');
+  size.textContent = formatSize(item.size);
+  metadata.append(modified, size);
+  card.append(heading, preview, metadata);
+  return card;
+}
+
+function renderItems() {
+  const folderGrid = $('#driveFolders');
+  const fileGrid = $('#driveFiles');
+  const query = $('#driveSearch').value.trim().toLocaleLowerCase('ro-RO');
+  const selectedType = $('#driveTypeFilter').value;
+  const filtered = items.filter(item => {
+    const matchesSearch = item.name.toLocaleLowerCase('ro-RO').includes(query);
+    const matchesType = selectedType === 'all' || item.type === selectedType;
+    return matchesSearch && matchesType;
   });
+  const folders = filtered.filter(item => item.type === 'folder');
+  const files = filtered.filter(item => item.type === 'file');
+  folderGrid.replaceChildren(...folders.map(createFolderCard));
+  fileGrid.replaceChildren(...files.map(createFileCard));
+  $('#driveFolderSection').hidden = folders.length === 0;
+  $('#driveFileSection').hidden = files.length === 0;
+  $('#driveEmpty').hidden = filtered.length !== 0;
+  $('#driveItemCount').textContent = `${filtered.length} ${filtered.length === 1 ? 'element' : 'elemente'}`;
 }
 
 async function openFolder(path = currentFolder) {
@@ -255,6 +326,8 @@ $('#driveLogout').addEventListener('click', async () => {
   await loadDrive();
 });
 $('#driveSearch').addEventListener('input', renderItems);
+$('#driveTypeFilter').addEventListener('change', renderItems);
+$('#driveHome').addEventListener('click', () => openFolder(''));
 $('#newFolderToggle').addEventListener('click', () => {
   $('#newFolderForm').hidden = false;
   $('#newFolderToggle').hidden = true;
@@ -266,6 +339,7 @@ $('#cancelNewFolder').addEventListener('click', () => {
 });
 $('#newFolderForm').addEventListener('submit', createFolder);
 $('#uploadButton').addEventListener('click', () => $('#fileInput').click());
+$('#driveUploadShortcut').addEventListener('click', () => $('#fileInput').click());
 $('#fileInput').addEventListener('change', event => uploadFiles([...event.currentTarget.files]));
 const dropzone = $('#driveDropzone');
 dropzone.addEventListener('dragover', event => {
@@ -279,6 +353,7 @@ dropzone.addEventListener('drop', event => {
   uploadFiles([...event.dataTransfer.files]);
 });
 dropzone.addEventListener('keydown', event => {
+  if (event.target !== dropzone) return;
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
     $('#fileInput').click();

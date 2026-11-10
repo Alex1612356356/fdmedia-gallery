@@ -6,16 +6,16 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#090909">
 <title>FD Drive — fdmedia.studio</title>
-<link rel="stylesheet" href="/static/style.css?v=1.1.0">
+<link rel="stylesheet" href="/static/style.css?v=1.2.1">
 </head>
 <body class="admin-page drive-page">
-<header class="top">
-  <a class="brand" href="https://fdmedia.studio" aria-label="FD Media Studios — site principal">
+<header class="drive-app-header">
+  <a class="drive-brand" href="https://fdmedia.studio" aria-label="FD Media Studios — site principal">
     <span class="brand-mark">FDM</span><span class="brand-caption">STUDIOS</span>
   </a>
-  <nav class="actions" aria-label="Navigare">
-    <a class="action-btn" href="/admin">Administrare</a>
-    <a class="action-btn" href="https://fdmedia.studio">Site principal</a>
+  <nav class="drive-header-links" aria-label="Navigare">
+    <a href="/admin">Administrare</a>
+    <a href="https://fdmedia.studio">Site principal</a>
   </nav>
 </header>
 <main class="drive-main">
@@ -30,56 +30,85 @@
       <p id="driveLoginMessage" class="form-message" role="alert" aria-live="polite"></p>
     </form>
   </section>
-  <section id="driveDashboard" hidden>
-    <div class="drive-heading">
-      <div>
-        <p class="eyebrow"><span class="eyebrow-dot"></span> FD MEDIA STUDIOS <span class="eyebrow-divider">/</span> SPAȚIU PRIVAT</p>
-        <h1>Drive<span>.</span></h1>
+  <section id="driveDashboard" class="drive-layout" hidden>
+    <aside class="drive-sidebar" aria-label="Navigare Drive">
+      <button id="newFolderToggle" class="drive-new-button" type="button"><span aria-hidden="true">+</span> Nou</button>
+      <nav class="drive-sidebar-nav">
+        <button id="driveHome" class="drive-sidebar-link drive-sidebar-active" type="button">
+          <span aria-hidden="true">⌂</span> Drive-ul meu
+        </button>
+        <a class="drive-sidebar-link" href="/admin"><span aria-hidden="true">⚙</span> Administrare galerii</a>
+        <a class="drive-sidebar-link" href="https://fdmedia.studio"><span aria-hidden="true">↗</span> Site principal</a>
+      </nav>
+      <div class="drive-sidebar-note">
+        <span class="drive-sidebar-note-icon" aria-hidden="true">▣</span>
+        <p>Fișierele tale sunt păstrate privat pe server.</p>
+        <span>Stocare privată</span>
+      </div>
+    </aside>
+    <div class="drive-content">
+      <div class="drive-content-topline">
+        <nav id="driveBreadcrumbs" class="drive-breadcrumbs" aria-label="Locația curentă"></nav>
+        <button id="driveLogout" class="drive-logout" type="button">Ieșire</button>
+      </div>
+      <section id="driveDropzone" class="drive-dropzone" tabindex="0" aria-label="Încarcă fișiere în folderul curent">
+        <span class="drive-upload-icon" aria-hidden="true">↑</span>
+        <span><strong>Adaugă fișiere în Drive</strong><small>Trage fișierele aici sau încarcă-le de pe dispozitiv.</small></span>
+        <button id="uploadButton" class="drive-upload-button" type="button">Încarcă fișiere</button>
+        <input id="fileInput" type="file" multiple hidden>
+      </section>
+      <div class="drive-welcome">
+        <h1 id="driveCurrentTitle">Bun venit în FD Drive</h1>
         <p>Fișierele tale, găzduite în siguranță pe serverul TrueNAS.</p>
       </div>
-      <button id="driveLogout" class="action-btn" type="button">Ieșire</button>
-    </div>
-    <section class="drive-panel" aria-label="Fișiere">
-      <div class="drive-toolbar">
-        <nav id="driveBreadcrumbs" class="drive-breadcrumbs" aria-label="Locația curentă"></nav>
+      <div class="drive-search-row">
         <label class="drive-search">
+          <span aria-hidden="true">⌕</span>
           <span class="visually-hidden">Caută în folderul curent</span>
           <input id="driveSearch" type="search" placeholder="Caută în acest folder">
         </label>
-        <button id="newFolderToggle" class="action-btn" type="button">Folder nou</button>
-        <button id="uploadButton" class="action-btn action-primary" type="button">Încarcă fișiere</button>
-        <input id="fileInput" type="file" multiple hidden>
+      </div>
+      <div class="drive-toolbar">
+        <label class="drive-filter">
+          <span class="visually-hidden">Filtrează după tip</span>
+          <select id="driveTypeFilter">
+            <option value="all">Toate elementele</option>
+            <option value="folder">Foldere</option>
+            <option value="file">Fișiere</option>
+          </select>
+        </label>
+        <button id="driveUploadShortcut" class="drive-toolbar-button" type="button">↑ Încarcă fișiere</button>
+        <span class="drive-toolbar-spacer"></span>
+        <span id="driveItemCount" class="drive-item-count"></span>
       </div>
       <form id="newFolderForm" class="drive-new-folder" hidden>
         <label for="newFolderName">Numele folderului</label>
         <input id="newFolderName" maxlength="120" required>
-        <button class="action-btn action-primary" type="submit">Creează</button>
-        <button id="cancelNewFolder" class="action-btn" type="button">Anulează</button>
+        <button class="drive-toolbar-button" type="submit">Creează</button>
+        <button id="cancelNewFolder" class="drive-toolbar-button" type="button">Anulează</button>
       </form>
-      <div id="driveDropzone" class="drive-dropzone" tabindex="0">
-        <span class="drive-upload-icon" aria-hidden="true">↑</span>
-        <span><strong>Trage fișierele aici</strong> sau folosește butonul „Încarcă fișiere”</span>
-      </div>
       <p id="driveMessage" class="drive-message" role="status" aria-live="polite"></p>
       <div id="driveProgress" class="drive-progress" hidden>
         <div class="drive-progress-track"><span id="driveProgressBar"></span></div>
         <span id="driveProgressLabel">Se încarcă...</span>
       </div>
-      <div class="drive-table-wrap">
-        <table class="drive-table">
-          <thead><tr><th scope="col">Nume</th><th scope="col">Modificat</th><th scope="col">Dimensiune</th><th scope="col"><span class="visually-hidden">Acțiuni</span></th></tr></thead>
-          <tbody id="driveItems"></tbody>
-        </table>
-      </div>
+      <section id="driveFolderSection" class="drive-items-section" aria-labelledby="driveFoldersHeading">
+        <h2 id="driveFoldersHeading">Foldere</h2>
+        <div id="driveFolders" class="drive-folder-grid"></div>
+      </section>
+      <section id="driveFileSection" class="drive-items-section" aria-labelledby="driveFilesHeading">
+        <h2 id="driveFilesHeading">Fișiere</h2>
+        <div id="driveFiles" class="drive-file-grid"></div>
+      </section>
       <div id="driveEmpty" class="drive-empty" hidden>
-        <span aria-hidden="true">✳</span>
+        <span aria-hidden="true">▱</span>
         <h2>Folderul este gol</h2>
         <p>Încarcă fișiere sau creează un folder nou pentru a începe.</p>
       </div>
-    </section>
-    <p class="drive-storage-note">Fișierele sunt stocate privat în volumul de date al aplicației și nu sunt incluse în galeriile pentru clienți.</p>
+      <p class="drive-storage-note">Fișierele sunt stocate privat în volumul de date al aplicației și nu sunt incluse în galeriile pentru clienți.</p>
+    </div>
   </section>
 </main>
-<script type="module" src="/static/drive.js?v=1.1.1"></script>
+<script type="module" src="/static/drive.js?v=1.2.0"></script>
 </body>
 </html>

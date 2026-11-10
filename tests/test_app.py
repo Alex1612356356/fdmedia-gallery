@@ -259,6 +259,27 @@ class GalleryAppTests(unittest.TestCase):
         self.assertTrue(status_response.json["alive"])
         self.assertEqual(status_response.json["total"], 5)
 
+    def test_admin_can_list_nested_media_folders(self):
+        (self.media / "event" / "Ceremonie").mkdir()
+        admin_app = create_app(
+            data_dir=self.data,
+            cache_dir=self.cache,
+            media_dir=self.media,
+            secret="test-secret-that-is-at-least-32-bytes",
+            admin_password="admin-password-for-tests-at-least-24",
+            cookie_secure=False,
+        )
+        client = admin_app.test_client()
+        self.assertEqual(client.get("/api/admin/media-folders").status_code, 401)
+        client.post(
+            "/api/admin/login",
+            json={"password": "admin-password-for-tests-at-least-24"},
+        )
+        response = client.get("/api/admin/media-folders")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+        self.assertEqual(response.json["folders"], ["event", "event/Ceremonie"])
+
     def test_secret_is_required_and_long_enough(self):
         with self.assertRaises(RuntimeError):
             create_app(data_dir=self.data, cache_dir=self.cache, media_dir=self.media, secret="short")

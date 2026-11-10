@@ -323,6 +323,37 @@ async function refreshAlbums() {
   });
 }
 
+async function refreshMediaFolders() {
+  const select = $('#albumFolder');
+  const help = $('#albumFolderHelp');
+  select.replaceChildren();
+  const automatic = document.createElement('option');
+  automatic.value = '';
+  automatic.textContent = 'Creează automat un folder nou pentru galerie';
+  select.append(automatic);
+  try {
+    const response = await api('media-folders');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Nu am putut încărca folderele foto.');
+    if (!Array.isArray(result.folders) || result.folders.some(folder => typeof folder !== 'string')) {
+      throw new Error('Lista folderelor foto primită de la server nu este validă.');
+    }
+    result.folders.forEach(folder => {
+      const option = document.createElement('option');
+      option.value = folder;
+      option.textContent = folder;
+      select.append(option);
+    });
+    help.textContent = result.folders.length
+      ? 'Alege folderul relativ la /media din care va fi creată galeria.'
+      : 'Nu există foldere foto. Dacă lași selecția implicită, aplicația creează unul automat.';
+  } catch (error) {
+    help.textContent = error instanceof TypeError
+      ? 'Nu ne-am putut conecta pentru a încărca folderele. Poți continua și se va crea automat un folder nou.'
+      : `${error.message} Poți continua și se va crea automat un folder nou.`;
+  }
+}
+
 async function loadAdmin() {
   try {
     const response = await api('session');
@@ -331,7 +362,7 @@ async function loadAdmin() {
     loginSection.hidden = state.authenticated;
     dashboard.hidden = !state.authenticated;
     if (state.authenticated) {
-      await refreshAlbums();
+      await Promise.all([refreshAlbums(), refreshMediaFolders()]);
     } else {
       document.querySelectorAll('.album-pin-value').forEach(value => { value.textContent = ''; });
       document.querySelectorAll('.album-pin-control button').forEach(button => {
@@ -391,7 +422,7 @@ $('#createAlbumForm').addEventListener('submit', async event => {
     if (!response.ok) throw new Error(result.error || 'Nu am putut crea galeria.');
     $('#createAlbumMessage').textContent = `Galeria a fost creată: ${location.origin}${result.url}`;
     event.currentTarget.reset();
-    await refreshAlbums();
+    await Promise.all([refreshAlbums(), refreshMediaFolders()]);
   } catch (error) {
     $('#createAlbumMessage').textContent = error instanceof TypeError
       ? 'Nu ne-am putut conecta la server.'

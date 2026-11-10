@@ -52,7 +52,7 @@
     <section class="admin-panel create-panel">
       <p class="eyebrow">O NOUĂ POVESTE</p>
       <h2>Creează o galerie</h2>
-      <p>Poți încărca fotografiile direct în galerie; folderul va fi creat automat.</p>
+      <p>Selectează un folder foto existent sau creează unul automat pentru galerie.</p>
       <form id="createAlbumForm" class="admin-form">
         <label class="pin-label" for="albumTitle">NUMELE AFIȘAT CLIENȚILOR</label>
         <input id="albumTitle" name="title" maxlength="120" placeholder="Nuntă Ana & Mihai" required>
@@ -60,8 +60,10 @@
         <div class="slug-field"><span>/g/</span><input id="albumSlug" name="slug" maxlength="63" pattern="[a-z0-9][a-z0-9-]{0,62}" placeholder="nunta-ana-mihai" required></div>
         <p class="field-help">Folosește litere mici, cifre și cratime. Linkul va fi /g/identificator.</p>
         <label class="pin-label" for="albumFolder">FOLDER FOTO EXISTENT (OPȚIONAL)</label>
-        <input id="albumFolder" name="folder" placeholder="Lasă gol pentru a crea automat un folder nou">
-        <p class="field-help">Dacă lași câmpul gol, aplicația creează /media/identificatorul-galeriei. Pentru fotografii deja existente, poți indica folderul relativ la /media.</p>
+        <select id="albumFolder" name="folder">
+          <option value="">Se încarcă folderele foto...</option>
+        </select>
+        <p id="albumFolderHelp" class="field-help" role="status" aria-live="polite">Folderele sunt încărcate din spațiul foto /media.</p>
         <p class="field-help">Subfolderele din folderul galeriei devin automat secțiuni (de ex. „Ceremonie” și „Petrecere”). Fișierele puse direct în folder apar la „General”.</p>
         <label class="pin-label" for="albumTheme">TEMA GALERIEI</label>
         <select id="albumTheme" name="theme">
@@ -86,6 +88,6 @@
     </section>
   </section>
 </main>
-<script type="module" src="/static/admin.js?v=1.2.0"></script>
+<script type="module" src="/static/admin.js?v=1.2.1"></script>
 </body>
 </html>
