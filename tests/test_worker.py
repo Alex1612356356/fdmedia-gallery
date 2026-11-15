@@ -26,6 +26,60 @@ class WorkerTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_video_cache_requires_every_selectable_resolution(self):
+        root = self.cache / "summer"
+        name = "clip.mp4"
+        relative_name = Path(name)
+        for directory in ("t", "m", "l", "v360", "v", "v1080"):
+            suffix = ".mp4" if directory.startswith("v") else ".webp"
+            rendition = root / directory / relative_name.with_name(f"{name}{suffix}")
+            rendition.parent.mkdir(parents=True, exist_ok=True)
+            rendition.write_bytes(b"rendition")
+
+        self.assertTrue(worker.cache_is_complete(root, name, "video"))
+        (root / "v1080" / "clip.mp4.mp4").unlink()
+        self.assertFalse(worker.cache_is_complete(root, name, "video"))
+
+    def test_scan_rebuilds_video_cache_from_an_older_version(self):
+        source = self.media / "event" / "clip.mp4"
+        source.write_bytes(b"source")
+        stat = source.stat()
+        root = self.cache / "summer"
+        for directory in ("t", "m", "l", "v360", "v", "v1080"):
+            suffix = ".mp4" if directory.startswith("v") else ".webp"
+            rendition = root / directory / f"clip.mp4{suffix}"
+            rendition.parent.mkdir(parents=True, exist_ok=True)
+            rendition.write_bytes(b"old rendition")
+        (root / "index.json").parent.mkdir(parents=True, exist_ok=True)
+        (root / "index.json").write_text(
+            json.dumps(
+                {
+                    "items": [
+                        {
+                            "n": "clip.mp4",
+                            "type": "video",
+                            "w": 640,
+                            "h": 360,
+                            "m": stat.st_mtime_ns,
+                            "size": stat.st_size,
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with patch.object(worker, "MEDIA", self.media), patch.object(
+            worker, "CACHE", self.cache
+        ), patch.object(worker, "DATA", self.data), patch.object(
+            worker, "process_media", return_value={"w": 640, "h": 360}
+        ) as process_media:
+            worker.scan_once()
+
+        process_media.assert_any_call(source, "summer", "clip.mp4", "video")
+        index = json.loads((root / "index.json").read_text(encoding="utf-8"))
+        self.assertEqual(index["items"][0]["video_version"], worker.VIDEO_CACHE_VERSION)
+
     def test_scan_generates_images_and_recovers_missing_cache_files(self):
         with patch.object(worker, "MEDIA", self.media), patch.object(worker, "CACHE", self.cache), patch.object(
             worker, "DATA", self.data
@@ -36,14 +90,14 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual([item["n"] for item in index["items"]], ["photo.jpg"])
             self.assertEqual((root / "l" / "photo.jpg.webp").is_file(), True)
             self.assertEqual((root / "t" / "photo.jpg.webp").is_file(), True)
-            self.assertFalse((root / "m" / "photo.jpg.webp").exists())
+            self.assertTrue((root / "m" / "photo.jpg.webp").is_file())
 
             Image.new("RGB", (640, 480), "blue").save(self.media / "event" / "new-photo.jpg")
             (root / "t" / "photo.jpg.webp").unlink()
             worker.scan_once()
             index = json.loads((root / "index.json").read_text(encoding="utf-8"))
             self.assertEqual([item["n"] for item in index["items"]], ["new-photo.jpg", "photo.jpg"])
-            self.assertTrue((root / "l" / "new-photo.jpg.webp").is_file())
+            self.assertTrue((root / "m" / "new-photo.jpg.webp").is_file())
             self.assertTrue((root / "t" / "new-photo.jpg.webp").is_file())
             self.assertTrue((root / "t" / "photo.jpg.webp").is_file())
 
@@ -119,22 +173,36 @@ class WorkerTests(unittest.TestCase):
     def test_video_transcode_maps_supported_streams_and_uses_compatible_pixel_format(self):
         source = self.media / "event" / "sample.mov"
         source.touch()
-        with patch.object(worker, "CACHE", self.cache), patch.object(worker, "run_ffmpeg") as run_ffmpeg, patch.object(
-            worker, "make_webp", return_value=(1280, 720)
-        ):
+
+        def fake_ffmpeg(args, _slug):
+            output = Path(args[-1])
+            if output.suffix == ".mp4":
+                output.write_bytes(b"encoded video")
+
+        with patch.object(worker, "CACHE", self.cache), patch.object(
+            worker, "run_ffmpeg", side_effect=fake_ffmpeg
+        ) as run_ffmpeg, patch.object(worker, "make_webp", return_value=(1280, 720)):
             worker.process_media(source, "summer", source.name, "video")
 
-        self.assertEqual(run_ffmpeg.call_count, 2)
-        transcode_args = run_ffmpeg.call_args_list[1].args[0]
-        self.assertIn("0:v:0", transcode_args)
-        self.assertIn("0:a:0?", transcode_args)
-        self.assertIn("yuv420p", transcode_args)
-        self.assertIn("libx264", transcode_args)
-        self.assertIn(
-            "scale=-2:720:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
-            transcode_args,
-        )
-        self.assertTrue(any("v" in arg for arg in transcode_args))
+        self.assertEqual(run_ffmpeg.call_count, 4)
+        rendition_args = [call.args[0] for call in run_ffmpeg.call_args_list[1:]]
+        for args, directory, height in zip(
+            rendition_args,
+            ("v360", "v", "v1080"),
+            (360, 720, 1080),
+        ):
+            self.assertIn("0:v:0", args)
+            self.assertIn("0:a:0?", args)
+            self.assertIn("yuv420p", args)
+            self.assertIn("libx264", args)
+            self.assertIn(
+                f"scale=-2:min(ih\\,{height}):force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                args,
+            )
+            self.assertTrue(any(directory in arg for arg in args))
+            self.assertTrue(Path(args[-1]).name.endswith(".tmp.mp4"))
+            self.assertFalse(Path(args[-1]).exists())
+            self.assertTrue((self.cache / "summer" / directory / "sample.mov.mp4").is_file())
 
 
 if __name__ == "__main__":

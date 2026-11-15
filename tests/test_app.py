@@ -68,20 +68,26 @@ class GalleryAppTests(unittest.TestCase):
         self.assertIn("attachment", response.headers["Content-Disposition"])
         response.close()
 
-    def test_gallery_serves_full_size_images_and_fixed_video_rendition(self):
+    def test_gallery_serves_selectable_photo_and_video_renditions(self):
         index_path = self.cache / "event-one" / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8"))
         index["items"].append({"n": "clip.mp4", "type": "video", "w": 640, "h": 360})
         index_path.write_text(json.dumps(index), encoding="utf-8")
-        for directory in ("l", "v"):
-            path = self.cache / "event-one" / directory / ("clip.mp4.mp4" if directory == "v" else "photo one.jpg.webp")
+        for directory in ("t", "m", "l", "v360", "v", "v1080"):
+            path = self.cache / "event-one" / directory / (
+                "clip.mp4.mp4" if directory.startswith("v") else "photo one.jpg.webp"
+            )
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(directory.encode("ascii"))
 
         self.client.post("/api/event-one/login", json={"pin": "12345678"})
         for kind, name, expected in (
+            ("t", "photo one.jpg", b"t"),
+            ("m", "photo one.jpg", b"m"),
             ("l", "photo one.jpg", b"l"),
+            ("v360", "clip.mp4", b"v360"),
             ("v", "clip.mp4", b"v"),
+            ("v1080", "clip.mp4", b"v1080"),
         ):
             with self.subTest(kind=kind):
                 response = self.client.get(f"/m/event-one/{kind}/{name}")
@@ -89,18 +95,22 @@ class GalleryAppTests(unittest.TestCase):
                 self.assertEqual(response.data, expected)
                 response.close()
 
-    def test_adaptive_rendition_routes_are_not_available(self):
+    def test_video_uses_available_rendition_when_selected_resolution_is_missing(self):
         index_path = self.cache / "event-one" / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8"))
         index["items"].append({"n": "clip.mp4", "type": "video", "w": 640, "h": 360})
         index_path.write_text(json.dumps(index), encoding="utf-8")
+        rendition = self.cache / "event-one" / "v" / "clip.mp4.mp4"
+        rendition.parent.mkdir(parents=True)
+        rendition.write_bytes(b"available-720p-video")
 
         self.client.post("/api/event-one/login", json={"pin": "12345678"})
-        for kind in ("m", "v360", "v1080"):
-            with self.subTest(kind=kind):
-                response = self.client.get(f"/m/event-one/{kind}/clip.mp4")
-                self.assertEqual(response.status_code, 404)
-                response.close()
+        response = self.client.get("/m/event-one/v1080/clip.mp4")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, b"available-720p-video")
+        self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+        response.close()
 
     def test_admin_delete_removes_current_and_legacy_media_renditions(self):
         admin_app = create_app(

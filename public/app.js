@@ -5,12 +5,47 @@ let items = [], favs = new Set(), onlyFav = false, isAdmin = false, sections = [
 let uploadAllowed = false;
 const shareLink = new URLSearchParams(location.search).get('link');
 let imageObserver;
+const photoResolutionKey = `fd-gallery:${slug}:photo-resolution`;
+const videoResolutionKey = `fd-gallery:${slug}:video-resolution`;
+const photoResolutions = ['t', 'm', 'l'];
+const videoResolutions = ['v360', 'v', 'v1080'];
+function savedResolution(key, choices, fallback) {
+  try {
+    const saved = localStorage.getItem(key);
+    return choices.includes(saved) ? saved : fallback;
+  } catch {
+    return fallback;
+  }
+}
+let photoResolution = savedResolution(photoResolutionKey, photoResolutions, 'l');
+let videoResolution = savedResolution(videoResolutionKey, videoResolutions, 'v');
 const api = (p, o = {}) => {
   const endpoint = new URL(`/api/${encodeURIComponent(slug)}/${p}`, location.origin);
   if (shareLink) endpoint.searchParams.set('link', shareLink);
   return fetch(endpoint, { credentials: 'same-origin', cache: 'no-store', ...o });
 };
 const url = (k, n, m) => `/m/${slug}/${k}/${encodeURIComponent(n)}${m === undefined ? '' : `?v=${encodeURIComponent(m)}`}`;
+
+function updateResolutionLinks() {
+  grid.querySelectorAll('.ph-link').forEach(link => {
+    const item = visible()[Number(link.dataset.i)];
+    if (item) link.href = url(item.type === 'video' ? videoResolution : photoResolution, item.n, item.m);
+  });
+}
+
+function setResolution(type, value) {
+  const isVideo = type === 'video';
+  const choices = isVideo ? videoResolutions : photoResolutions;
+  if (!choices.includes(value)) return;
+  if (isVideo) videoResolution = value;
+  else photoResolution = value;
+  try {
+    localStorage.setItem(isVideo ? videoResolutionKey : photoResolutionKey, value);
+  } catch {
+    $('#galleryNotice').textContent = 'Alegerea a fost aplicată, dar nu poate fi salvată în acest browser.';
+  }
+  updateResolutionLinks();
+}
 
 function updateUploadPanel() {
   const enabled = isAdmin || uploadAllowed;
@@ -239,7 +274,7 @@ function render() {
     const link = document.createElement('a');
     link.className = 'ph-link';
     link.dataset.i = i;
-    link.href = url(it.type === 'video' ? 'v' : 'l', it.n, it.m);
+    link.href = url(it.type === 'video' ? videoResolution : photoResolution, it.n, it.m);
     link.dataset.pswpWidth = it.w; link.dataset.pswpHeight = it.h;
     const image = document.createElement('img');
     image.alt = it.type === 'video' ? `Previzualizare videoclip: ${it.n}` : `Fotografie: ${it.n}`;
@@ -344,7 +379,7 @@ function initLightbox() {
   });
   // Video slides
   lb.addFilter('itemData', d => { const it = visible()[+d.element?.dataset.i]; if (it?.type === 'video')
-    return { ...d, type: 'video', videoSrc: url('v', it.n, it.m), poster: url('p', it.n, it.m) }; return d; });
+    return { ...d, type: 'video', videoSrc: url(videoResolution, it.n, it.m), poster: url(photoResolution, it.n, it.m) }; return d; });
   lb.on('contentLoad', e => { const { content } = e; if (content.data.type !== 'video') return; e.preventDefault();
     content.element = Object.assign(document.createElement('video'), { className: 'pswp__video', controls: true, playsInline: true, preload: 'metadata', poster: content.data.poster, src: content.data.videoSrc });
     content.onLoaded(); });
@@ -400,6 +435,10 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') refreshGallery();
 });
 $('#filterFav').onclick = () => { onlyFav = !onlyFav; $('#galleryNotice').textContent = ''; render(); };
+$('#photoResolution').value = photoResolution;
+$('#videoResolution').value = videoResolution;
+$('#photoResolution').addEventListener('change', event => setResolution('photo', event.currentTarget.value));
+$('#videoResolution').addEventListener('change', event => setResolution('video', event.currentTarget.value));
 $('#galleryUploadButton').addEventListener('click', () => $('#galleryFileInput').click());
 $('#galleryFileInput').addEventListener('change', event => uploadGalleryFiles([...event.currentTarget.files]));
 const galleryDropzone = $('#galleryDropzone');

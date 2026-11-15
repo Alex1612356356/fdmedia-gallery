@@ -13,7 +13,7 @@ GitHub Actions builds and publishes
 (GHCR). The image is public, so TrueNAS can pull it without registry credentials.
 The pinned image digest used in the deployment examples is
 `ghcr.io/alex1612356356/fdmedia-gallery@sha256:194c0980050f8348f96a44226fe8ebe823e81b5c8fcd479dfc1c41cc319bdab9`
-(commit `7d2470c`). Pinning by digest keeps deployments on the exact same image
+(commit `bbe9257`). Pinning by digest keeps deployments on the exact same image
 even when branch tags such as `main` and `latest` move. When changing the
 Compose image, pull the image and recreate both services; editing the YAML
 alone does not update already-running containers.
@@ -160,8 +160,8 @@ needed.
 Open `http://TRUENAS-IP:3050/healthz` from your local network. A healthy install
 returns `{"ok":true}`. Then open `http://TRUENAS-IP:3050/admin` and sign in with
 the `ADMIN_PASSWORD` you configured. Create a gallery by entering its title,
-slug, existing photo subfolder relative to `/media`, client PIN, theme, and
-optional description.
+slug, selecting an existing photo folder relative to `/media` (or leaving the
+automatic folder option selected), client PIN, theme, and optional description.
 
 For public access, configure a DNS hostname and HTTPS reverse proxy or
 Cloudflare Tunnel before sharing gallery links. The default setting
@@ -243,9 +243,10 @@ COOKIE_SECURE: "false"
 ```
 
 Then visit `http://TRUE_NAS_LAN_IP:3050/admin` when using the TrueNAS Custom App
-configuration above. Create an album by entering its
-display title, URL slug, existing folder relative to `/media`, and the PIN
-clients will use. Choose one of the built-in themes (default, wedding, baptism
+configuration above. Create an album by entering its display title and URL
+slug, selecting an existing folder relative to `/media` (or keeping the
+automatic folder option selected), and entering the PIN clients will use.
+Choose one of the built-in themes (default, wedding, baptism
 boy/girl, or prom boy/girl). Each theme has its own full-page color palette,
 background treatment, and accent pattern. The administrator can change a
 gallery's theme at any time from its entry in the existing-albums list; clients
@@ -308,11 +309,14 @@ command again for the same slug resets that album's title/PIN.
 
 You can also create galleries and upload media from the web app. Open
 `https://YOUR_HOST/admin`, sign in, create a gallery, and leave the optional
-folder field blank to have the app create `/media/<gallery-slug>` automatically.
+folder selector on its automatic option to have the app create
+`/media/<gallery-slug>` automatically. You can also select an existing folder
+from `/media` to use its photos for the gallery.
 Open the gallery, enter its PIN, and drag files into the upload area. The worker
-will process supported images, RAW files, and videos before they appear. The
-gallery displays full-size photo renditions and a fixed 720p video rendition;
-it does not inspect network speed or switch media quality.
+will process supported images, RAW files, and videos before they appear. Visitors
+can select photo resolution (640, 1280, or 2560 px) and video resolution (360p,
+720p, or 1080p). Choices are saved in that browser on that device; the gallery
+does not inspect network speed or change resolution automatically.
 The album's **Linkuri suplimentare** controls create separate links; each link
 can allow or block uploads independently, and visitors still need the gallery
 PIN. You can change a link's upload permission or revoke it from the admin page.

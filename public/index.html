@@ -64,6 +64,24 @@
       <span class="gallery-heading-line"></span>
       <span class="gallery-hint">Selectați o imagine pentru a o vizualiza</span>
     </div>
+    <div class="resolution-controls" aria-label="Alege rezoluția media">
+      <label class="resolution-control" for="photoResolution">
+        <span>Rezoluție fotografii</span>
+        <select id="photoResolution">
+          <option value="t">640 px</option>
+          <option value="m">1280 px</option>
+          <option value="l">2560 px</option>
+        </select>
+      </label>
+      <label class="resolution-control" for="videoResolution">
+        <span>Rezoluție videoclipuri</span>
+        <select id="videoResolution">
+          <option value="v360">360p</option>
+          <option value="v">720p</option>
+          <option value="v1080">1080p</option>
+        </select>
+      </label>
+    </div>
     <nav id="sectionFilters" class="section-filters" aria-label="Filtrează după secțiune" hidden></nav>
     <p id="galleryNotice" class="gallery-notice" role="status" aria-live="polite"></p>
     <div id="grid" class="grid"></div>
@@ -102,6 +120,6 @@
     <p class="gate-footer">CAPTURĂM EMOȚIA PURĂ <span>·</span> FOTO &amp; VIDEO DE EVENIMENT</p>
   </div>
 </div>
-<script type="module" src="/static/app.js?v=1.3.0"></script>
+<script type="module" src="/static/app.js?v=1.4.0"></script>
 </body>
 </html>

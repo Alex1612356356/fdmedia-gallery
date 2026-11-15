@@ -27,6 +27,7 @@ STATUS_LOCK = threading.Lock()
 IMAGE_EXTENSIONS = re.compile(r"\.(jpe?g|png|webp|tiff?|heic|avif)$", re.IGNORECASE)
 RAW_EXTENSIONS = re.compile(r"\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$", re.IGNORECASE)
 VIDEO_EXTENSIONS = re.compile(r"\.(mp4|mov|mkv|m4v|avi)$", re.IGNORECASE)
+VIDEO_CACHE_VERSION = 2
 
 
 class AlbumRemoved(Exception):
@@ -166,44 +167,57 @@ def process_media(source, slug, name, kind):
     root = CACHE / slug
     relative_name = Path(*Path(name).parts)
     thumbnail = root / "t" / relative_name.with_name(f"{relative_name.name}.webp")
+    medium = root / "m" / relative_name.with_name(f"{relative_name.name}.webp")
     large = root / "l" / relative_name.with_name(f"{relative_name.name}.webp")
     if kind == "video":
         poster = root / "tmp" / relative_name.with_name(f"{relative_name.name}.jpg")
-        video = root / "v" / relative_name.with_name(f"{relative_name.name}.mp4")
         poster.parent.mkdir(parents=True, exist_ok=True)
-        video.parent.mkdir(parents=True, exist_ok=True)
         try:
             run_ffmpeg(["-ss", "1", "-i", str(source), "-frames:v", "1", str(poster)], slug)
         except (OSError, subprocess.SubprocessError):
             run_ffmpeg(["-i", str(source), "-frames:v", "1", str(poster)], slug)
-        run_ffmpeg(
-            [
-                "-i",
-                str(source),
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a:0?",
-                "-sn",
-                "-dn",
-                "-vf",
-                "scale=-2:720:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
-                "-c:v",
-                "libx264",
-                "-pix_fmt",
-                "yuv420p",
-                "-crf",
-                "26",
-                "-preset",
-                "veryfast",
-                "-c:a",
-                "aac",
-                "-movflags",
-                "+faststart",
-                str(video),
-            ],
-            slug,
-        )
+        for height, directory, quality in (
+            (360, "v360", "28"),
+            (720, "v", "26"),
+            (1080, "v1080", "24"),
+        ):
+            video = root / directory / relative_name.with_name(f"{relative_name.name}.mp4")
+            video.parent.mkdir(parents=True, exist_ok=True)
+            temporary_video = video.with_name(f".{video.name}.{os.getpid()}.tmp.mp4")
+            try:
+                run_ffmpeg(
+                    [
+                        "-i",
+                        str(source),
+                        "-map",
+                        "0:v:0",
+                        "-map",
+                        "0:a:0?",
+                        "-sn",
+                        "-dn",
+                        "-vf",
+                        f"scale=-2:min(ih\\,{height}):force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                        "-c:v",
+                        "libx264",
+                        "-pix_fmt",
+                        "yuv420p",
+                        "-crf",
+                        quality,
+                        "-preset",
+                        "veryfast",
+                        "-c:a",
+                        "aac",
+                        "-movflags",
+                        "+faststart",
+                        str(temporary_video),
+                    ],
+                    slug,
+                )
+                if not temporary_video.is_file() or temporary_video.stat().st_size == 0:
+                    raise RuntimeError(f"ffmpeg did not create a video rendition for {source.name}")
+                os.replace(temporary_video, video)
+            finally:
+                temporary_video.unlink(missing_ok=True)
         image_source = poster
     elif kind == "raw":
         image_source = extract_raw_preview(source)
@@ -211,6 +225,7 @@ def process_media(source, slug, name, kind):
         image_source = source
 
     large_width, large_height = make_webp(image_source, large, 2560, 82)
+    make_webp(image_source, medium, 1280, 78)
     make_webp(image_source, thumbnail, 640, 72)
     return {"w": large_width, "h": large_height}
 
@@ -224,6 +239,8 @@ def cache_is_complete(root, name, kind):
     ]
     if kind == "video":
         expected.append(root / "v" / relative_name.with_name(f"{relative_name.name}.mp4"))
+        expected.append(root / "v360" / relative_name.with_name(f"{relative_name.name}.mp4"))
+        expected.append(root / "v1080" / relative_name.with_name(f"{relative_name.name}.mp4"))
     return all(file.is_file() and file.stat().st_size > 0 for file in expected)
 
 
@@ -275,7 +292,12 @@ def scan_album(slug, album):
                 continue
             stat = source.stat()
             prior = old.get(name)
-            same_source = prior and prior.get("m") == stat.st_mtime_ns and prior.get("size") == stat.st_size
+            same_source = (
+                prior
+                and prior.get("m") == stat.st_mtime_ns
+                and prior.get("size") == stat.st_size
+                and (kind != "video" or prior.get("video_version") == VIDEO_CACHE_VERSION)
+            )
             if same_source and cache_is_complete(root, name, kind):
                 dimensions = {"w": prior.get("w"), "h": prior.get("h")}
             else:
@@ -286,17 +308,18 @@ def scan_album(slug, album):
                 return
             if not dimensions["w"] or not dimensions["h"]:
                 raise ValueError("Could not determine image dimensions")
-            items.append(
-                {
-                    "n": name,
-                    "type": "video" if kind == "video" else "image",
-                    "raw": kind == "raw",
-                    "w": dimensions["w"],
-                    "h": dimensions["h"],
-                    "m": stat.st_mtime_ns,
-                    "size": stat.st_size,
-                }
-            )
+            item = {
+                "n": name,
+                "type": "video" if kind == "video" else "image",
+                "raw": kind == "raw",
+                "w": dimensions["w"],
+                "h": dimensions["h"],
+                "m": stat.st_mtime_ns,
+                "size": stat.st_size,
+            }
+            if kind == "video":
+                item["video_version"] = VIDEO_CACHE_VERSION
+            items.append(item)
             write_json_atomic(
                 index_file,
                 {"updated": int(time.time() * 1000), "items": items},
