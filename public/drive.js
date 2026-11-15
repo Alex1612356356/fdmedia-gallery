@@ -3,6 +3,7 @@ const login = $('#driveLogin');
 const dashboard = $('#driveDashboard');
 let currentFolder = '';
 let items = [];
+const selectedFiles = new Set();
 
 function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
@@ -92,12 +93,51 @@ function fileType(name) {
   return { label: extension && extension !== name ? extension.slice(0, 5).toUpperCase() : 'FILE', kind: 'generic', preview: false };
 }
 
+function visibleFiles() {
+  const query = $('#driveSearch').value.trim().toLocaleLowerCase('ro-RO');
+  const selectedType = $('#driveTypeFilter').value;
+  return items.filter(item => item.type === 'file'
+    && item.name.toLocaleLowerCase('ro-RO').includes(query)
+    && (selectedType === 'all' || selectedType === 'file'));
+}
+
+function updateSelectionControls() {
+  const count = selectedFiles.size;
+  const deleteButton = $('#driveDeleteSelected');
+  deleteButton.hidden = count === 0;
+  deleteButton.disabled = count === 0;
+  deleteButton.textContent = `Șterge selectate (${count})`;
+  $('#driveClearSelection').hidden = count === 0;
+
+  const files = visibleFiles();
+  const allVisibleSelected = files.length > 0 && files.every(item => selectedFiles.has(item.name));
+  const selectButton = $('#driveSelectVisible');
+  selectButton.disabled = files.length === 0;
+  selectButton.textContent = allVisibleSelected
+    ? 'Deselectează fișierele afișate'
+    : 'Selectează fișierele afișate';
+}
+
 function createFileCard(item) {
   const card = document.createElement('article');
   card.className = 'drive-file-card';
+  card.classList.toggle('drive-file-card-selected', selectedFiles.has(item.name));
   const heading = document.createElement('div');
   heading.className = 'drive-file-heading';
   const type = fileType(item.name);
+  const selection = document.createElement('label');
+  selection.className = 'drive-file-select';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = selectedFiles.has(item.name);
+  checkbox.setAttribute('aria-label', `Selectează ${item.name}`);
+  checkbox.addEventListener('change', () => {
+    if (checkbox.checked) selectedFiles.add(item.name);
+    else selectedFiles.delete(item.name);
+    card.classList.toggle('drive-file-card-selected', checkbox.checked);
+    updateSelectionControls();
+  });
+  selection.append(checkbox);
   const icon = document.createElement('span');
   icon.className = `drive-file-icon drive-file-icon-${type.kind}`;
   icon.setAttribute('aria-hidden', 'true');
@@ -125,7 +165,7 @@ function createFileCard(item) {
   remove.addEventListener('click', () => deleteFile(path, item.name, remove));
   menuItems.append(download, remove);
   menu.append(menuToggle, menuItems);
-  heading.append(icon, name, menu);
+  heading.append(selection, icon, name, menu);
 
   const preview = document.createElement('a');
   preview.className = `drive-file-preview drive-file-preview-${type.kind}`;
@@ -174,6 +214,7 @@ function renderItems() {
   $('#driveFileSection').hidden = files.length === 0;
   $('#driveEmpty').hidden = filtered.length !== 0;
   $('#driveItemCount').textContent = `${filtered.length} ${filtered.length === 1 ? 'element' : 'elemente'}`;
+  updateSelectionControls();
 }
 
 async function openFolder(path = currentFolder) {
@@ -187,6 +228,7 @@ async function openFolder(path = currentFolder) {
     }
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Nu am putut deschide folderul.');
+    if (result.folder !== currentFolder) selectedFiles.clear();
     currentFolder = result.folder;
     items = result.items;
     renderBreadcrumbs();
@@ -291,11 +333,40 @@ async function deleteFile(path, name, button) {
     const response = await api('drive', { method: 'DELETE', body: JSON.stringify({ path }) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Nu am putut șterge fișierul.');
+    selectedFiles.delete(name);
     await openFolder();
     setMessage('Fișierul a fost șters.');
   } catch (error) {
     setMessage(error instanceof TypeError ? 'Nu ne-am putut conecta la server.' : error.message, true);
     button.disabled = false;
+  }
+}
+
+async function deleteSelectedFiles() {
+  const names = [...selectedFiles];
+  if (!names.length || !window.confirm(`Ștergi definitiv ${names.length} fișiere?`)) return;
+  const paths = names.map(name => currentFolder ? `${currentFolder}/${name}` : name);
+  const button = $('#driveDeleteSelected');
+  button.disabled = true;
+  try {
+    const response = await api('drive', {
+      method: 'DELETE',
+      body: JSON.stringify({ paths }),
+    });
+    const result = await response.json();
+    const deleted = Array.isArray(result.deleted) ? result.deleted : [];
+    for (const path of deleted) selectedFiles.delete(path.split('/').pop());
+    await openFolder();
+    if (!response.ok) {
+      const partial = deleted.length ? ` S-au șters ${deleted.length} fișiere înainte de eroare.` : '';
+      throw new Error((result.error || 'Nu am putut șterge fișierele selectate.') + partial);
+    }
+    selectedFiles.clear();
+    setMessage(`Au fost șterse ${deleted.length} fișiere.`);
+  } catch (error) {
+    setMessage(error instanceof TypeError ? 'Nu ne-am putut conecta la server.' : error.message, true);
+  } finally {
+    updateSelectionControls();
   }
 }
 
@@ -323,10 +394,25 @@ $('#driveLoginForm').addEventListener('submit', async event => {
 $('#driveLogout').addEventListener('click', async () => {
   await api('logout', { method: 'POST' });
   currentFolder = '';
+  selectedFiles.clear();
   await loadDrive();
 });
 $('#driveSearch').addEventListener('input', renderItems);
 $('#driveTypeFilter').addEventListener('change', renderItems);
+$('#driveSelectVisible').addEventListener('click', () => {
+  const files = visibleFiles();
+  const allVisibleSelected = files.length > 0 && files.every(item => selectedFiles.has(item.name));
+  for (const file of files) {
+    if (allVisibleSelected) selectedFiles.delete(file.name);
+    else selectedFiles.add(file.name);
+  }
+  renderItems();
+});
+$('#driveDeleteSelected').addEventListener('click', deleteSelectedFiles);
+$('#driveClearSelection').addEventListener('click', () => {
+  selectedFiles.clear();
+  renderItems();
+});
 $('#driveHome').addEventListener('click', () => openFolder(''));
 $('#newFolderToggle').addEventListener('click', () => {
   $('#newFolderForm').hidden = false;

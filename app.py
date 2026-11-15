@@ -857,21 +857,45 @@ def create_app(
     @require_admin
     def admin_drive_delete():
         body = request.get_json(silent=True)
-        if not isinstance(body, dict) or not isinstance(body.get("path"), str):
+        if not isinstance(body, dict):
             return jsonify(error="Cerere invalidă."), 400
-        file_path = drive_path(body["path"])
-        if file_path is None:
-            return jsonify(error="Calea fișierului nu este validă."), 400
-        with admin_write_lock:
+        paths = body.get("paths")
+        if paths is None and isinstance(body.get("path"), str):
+            paths = [body["path"]]
+        if (
+            not isinstance(paths, list)
+            or not paths
+            or any(not isinstance(path, str) for path in paths)
+            or len(set(paths)) != len(paths)
+        ):
+            return jsonify(error="Selectați unul sau mai multe fișiere fără duplicate."), 400
+
+        files = []
+        for path in paths:
+            file_path = drive_path(path)
+            if file_path is None:
+                return jsonify(error=f"Calea fișierului „{path}” nu este validă."), 400
             if not file_path.is_file():
-                return jsonify(error="Fișierul nu a fost găsit."), 404
+                return jsonify(error=f"Fișierul „{path}” nu a fost găsit."), 404
+            files.append((path, file_path))
+
+        with admin_write_lock:
+            for path, file_path in files:
+                if not file_path.is_file():
+                    return jsonify(error=f"Fișierul „{path}” nu a fost găsit."), 404
+            deleted = []
             try:
-                file_path.unlink()
+                for path, file_path in files:
+                    file_path.unlink()
+                    deleted.append(path)
             except OSError:
-                log.exception("Could not delete Drive file %s", body["path"])
-                return jsonify(error="Nu am putut șterge fișierul."), 500
-        log.info("Deleted Drive file %s", body["path"])
-        return jsonify(ok=True)
+                log.exception("Could not delete selected Drive files")
+                return jsonify(
+                    error="Nu am putut șterge toate fișierele.",
+                    deleted=deleted,
+                ), 500
+        log.info("Deleted %s Drive files", len(deleted))
+        return jsonify(ok=True, deleted=deleted)
 
     @app.delete("/api/admin/albums/<slug>")
     @require_admin

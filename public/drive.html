@@ -53,7 +53,7 @@
       </div>
       <section id="driveDropzone" class="drive-dropzone" tabindex="0" aria-label="Încarcă fișiere în folderul curent">
         <span class="drive-upload-icon" aria-hidden="true">↑</span>
-        <span><strong>Adaugă fișiere în Drive</strong><small>Trage fișierele aici sau încarcă-le de pe dispozitiv.</small></span>
+        <span><strong>Adaugă fișiere în Drive</strong><small>Trage mai multe fișiere aici sau selectează mai multe de pe dispozitiv.</small></span>
         <button id="uploadButton" class="drive-upload-button" type="button">Încarcă fișiere</button>
         <input id="fileInput" type="file" multiple hidden>
       </section>
@@ -78,6 +78,9 @@
           </select>
         </label>
         <button id="driveUploadShortcut" class="drive-toolbar-button" type="button">↑ Încarcă fișiere</button>
+        <button id="driveSelectVisible" class="drive-toolbar-button" type="button" disabled>Selectează fișierele afișate</button>
+        <button id="driveDeleteSelected" class="drive-toolbar-button drive-delete-selected" type="button" hidden>Șterge selectate</button>
+        <button id="driveClearSelection" class="drive-toolbar-button" type="button" hidden>Anulează selecția</button>
         <span class="drive-toolbar-spacer"></span>
         <span id="driveItemCount" class="drive-item-count"></span>
       </div>

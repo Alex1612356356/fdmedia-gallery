@@ -185,13 +185,15 @@ class WorkerTests(unittest.TestCase):
             worker.process_media(source, "summer", source.name, "video")
 
         self.assertEqual(run_ffmpeg.call_count, 4)
+        poster_args = run_ffmpeg.call_args_list[0].args[0]
+        self.assertIn("0:V:0", poster_args)
         rendition_args = [call.args[0] for call in run_ffmpeg.call_args_list[1:]]
         for args, directory, height in zip(
             rendition_args,
             ("v360", "v", "v1080"),
             (360, 720, 1080),
         ):
-            self.assertIn("0:v:0", args)
+            self.assertIn("0:V:0", args)
             self.assertIn("0:a:0?", args)
             self.assertIn("yuv420p", args)
             self.assertIn("libx264", args)

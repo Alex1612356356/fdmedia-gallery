@@ -118,6 +118,28 @@ class DriveTests(unittest.TestCase):
         self.assertEqual(second.status_code, 409)
         self.assertEqual((self.data / "drive" / "same.txt").read_bytes(), b"one")
 
+    def test_bulk_delete_removes_selected_files_and_validates_all_paths_first(self):
+        self.login()
+        drive = self.data / "drive"
+        (drive / "first.txt").write_text("first", encoding="utf-8")
+        (drive / "second.txt").write_text("second", encoding="utf-8")
+
+        invalid = self.client.delete(
+            "/api/admin/drive",
+            json={"paths": ["first.txt", "../outside.txt"]},
+        )
+        self.assertEqual(invalid.status_code, 400)
+        self.assertTrue((drive / "first.txt").exists())
+
+        deleted = self.client.delete(
+            "/api/admin/drive",
+            json={"paths": ["first.txt", "second.txt"]},
+        )
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(set(deleted.json["deleted"]), {"first.txt", "second.txt"})
+        self.assertFalse((drive / "first.txt").exists())
+        self.assertFalse((drive / "second.txt").exists())
+
     def test_upload_limit_is_enforced_and_staged_files_are_removed(self):
         limited_app = create_app(
             data_dir=self.root / "limited-data",

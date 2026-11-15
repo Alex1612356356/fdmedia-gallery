@@ -645,6 +645,8 @@ button { color: inherit; }
 .drive-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-bottom: 22px; }
 .drive-filter select, .drive-toolbar-button { min-height: 36px; padding: 0 14px; border: 1px solid rgba(255,255,255,.24); border-radius: 20px; background: #111113; color: #c9c9ca; cursor: pointer; font: inherit; font-size: .72rem; }
 .drive-filter select:hover, .drive-toolbar-button:hover { background: #171719; color: #f6f6f5; }
+.drive-toolbar-button:disabled { cursor: not-allowed; opacity: .5; }
+.drive-delete-selected { border-color: rgba(255,155,155,.45); color: #ff9b9b; }
 .drive-toolbar-spacer { flex: 1 1 auto; }
 .drive-item-count { color: #9b9b9e; font-size: .72rem; }
 .drive-new-folder { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: -8px 0 18px; padding: 15px; border: 1px solid rgba(255,255,255,.13); border-radius: 12px; background: #111113; }
@@ -667,7 +669,10 @@ button { color: inherit; }
 .drive-file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 205px), 1fr)); gap: 13px; }
 .drive-file-card { position: relative; min-width: 0; overflow: visible; padding: 9px; border: 1px solid transparent; border-radius: 14px; background: #141821; transition: border-color .15s ease, box-shadow .15s ease; }
 .drive-file-card:hover { border-color: #303846; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.drive-file-card-selected { border-color: #8ab4f8; box-shadow: 0 0 0 1px #8ab4f8; }
 .drive-file-heading { display: flex; min-width: 0; height: 30px; align-items: center; gap: 8px; padding: 0 2px 7px; }
+.drive-file-select { display: grid; flex: 0 0 auto; place-items: center; cursor: pointer; }
+.drive-file-select input { width: 16px; height: 16px; margin: 0; accent-color: #8ab4f8; cursor: pointer; }
 .drive-file-icon { display: grid; width: 17px; height: 18px; flex: 0 0 auto; place-items: center; border-radius: 3px; background: #4285f4; color: #fff; font-size: .39rem; font-weight: 800; }
 .drive-file-icon-video { background: #e94235; }
 .drive-file-icon-pdf { background: #e94235; }

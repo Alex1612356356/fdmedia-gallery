@@ -27,7 +27,7 @@ STATUS_LOCK = threading.Lock()
 IMAGE_EXTENSIONS = re.compile(r"\.(jpe?g|png|webp|tiff?|heic|avif)$", re.IGNORECASE)
 RAW_EXTENSIONS = re.compile(r"\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$", re.IGNORECASE)
 VIDEO_EXTENSIONS = re.compile(r"\.(mp4|mov|mkv|m4v|avi)$", re.IGNORECASE)
-VIDEO_CACHE_VERSION = 2
+VIDEO_CACHE_VERSION = 3
 
 
 class AlbumRemoved(Exception):
@@ -173,9 +173,15 @@ def process_media(source, slug, name, kind):
         poster = root / "tmp" / relative_name.with_name(f"{relative_name.name}.jpg")
         poster.parent.mkdir(parents=True, exist_ok=True)
         try:
-            run_ffmpeg(["-ss", "1", "-i", str(source), "-frames:v", "1", str(poster)], slug)
+            run_ffmpeg(
+                ["-ss", "1", "-i", str(source), "-map", "0:V:0", "-frames:v", "1", str(poster)],
+                slug,
+            )
         except (OSError, subprocess.SubprocessError):
-            run_ffmpeg(["-i", str(source), "-frames:v", "1", str(poster)], slug)
+            run_ffmpeg(
+                ["-i", str(source), "-map", "0:V:0", "-frames:v", "1", str(poster)],
+                slug,
+            )
         for height, directory, quality in (
             (360, "v360", "28"),
             (720, "v", "26"),
@@ -190,7 +196,7 @@ def process_media(source, slug, name, kind):
                         "-i",
                         str(source),
                         "-map",
-                        "0:v:0",
+                        "0:V:0",
                         "-map",
                         "0:a:0?",
                         "-sn",
