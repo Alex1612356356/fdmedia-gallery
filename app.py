@@ -1171,6 +1171,9 @@ def create_app(
                 if relative_name is None:
                     abort(404)
                 for relative_path in (
+                    Path("t", *relative_name.parts[:-1]) / f"{relative_name.name}.png",
+                    Path("m", *relative_name.parts[:-1]) / f"{relative_name.name}.png",
+                    Path("l", *relative_name.parts[:-1]) / f"{relative_name.name}.png",
                     Path("t", *relative_name.parts[:-1]) / f"{relative_name.name}.webp",
                     Path("m", *relative_name.parts[:-1]) / f"{relative_name.name}.webp",
                     Path("l", *relative_name.parts[:-1]) / f"{relative_name.name}.webp",
@@ -1207,7 +1210,7 @@ def create_app(
                 "v360": "v360",
                 "v1080": "v1080",
             }[kind]
-            suffix = ".mp4" if kind.startswith("v") else ".webp"
+            suffix = ".mp4" if kind.startswith("v") else ".png"
             file_path = cache_dir / slug / subdir / Path(*relative_name.parts[:-1]) / f"{relative_name.name}{suffix}"
             used_fallback = False
             if kind.startswith("v") and item.get("type") == "video" and not file_path.is_file():

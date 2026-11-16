@@ -27,18 +27,19 @@ class WorkerTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_make_webp_converts_embedded_profile_to_srgb(self):
+    def test_make_png_converts_embedded_profile_to_srgb(self):
         source = self.media / "event" / "profiled.tif"
-        target = self.cache / "summer" / "l" / "profiled.tif.webp"
+        target = self.cache / "summer" / "l" / "profiled.tif.png"
         srgb = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
         lab = ImageCms.ImageCmsProfile(ImageCms.createProfile("LAB"))
         reference = Image.new("RGB", (32, 24), (210, 80, 40))
         profiled = ImageCms.profileToProfile(reference, srgb, lab, outputMode="LAB")
         profiled.save(source, icc_profile=lab.tobytes())
 
-        worker.make_webp(source, target, 64, 100)
+        worker.make_png(source, target, 64)
 
         with Image.open(target) as output:
+            self.assertEqual(output.format, "PNG")
             output_profile_data = output.info.get("icc_profile")
             self.assertTrue(output_profile_data)
             output_profile = ImageCms.ImageCmsProfile(io.BytesIO(output_profile_data))
@@ -55,7 +56,7 @@ class WorkerTests(unittest.TestCase):
         name = "clip.mp4"
         relative_name = Path(name)
         for directory in ("t", "m", "l", "v360", "v", "v1080"):
-            suffix = ".mp4" if directory.startswith("v") else ".webp"
+            suffix = ".mp4" if directory.startswith("v") else ".png"
             rendition = root / directory / relative_name.with_name(f"{name}{suffix}")
             rendition.parent.mkdir(parents=True, exist_ok=True)
             rendition.write_bytes(b"rendition")
@@ -70,7 +71,7 @@ class WorkerTests(unittest.TestCase):
         stat = source.stat()
         root = self.cache / "summer"
         for directory in ("t", "m", "l", "v360", "v", "v1080"):
-            suffix = ".mp4" if directory.startswith("v") else ".webp"
+            suffix = ".mp4" if directory.startswith("v") else ".png"
             rendition = root / directory / f"clip.mp4{suffix}"
             rendition.parent.mkdir(parents=True, exist_ok=True)
             rendition.write_bytes(b"old rendition")
@@ -113,27 +114,29 @@ class WorkerTests(unittest.TestCase):
             root = self.cache / "summer"
             index = json.loads((root / "index.json").read_text(encoding="utf-8"))
             self.assertEqual([item["n"] for item in index["items"]], ["photo.jpg"])
-            self.assertEqual((root / "l" / "photo.jpg.webp").is_file(), True)
-            self.assertEqual((root / "t" / "photo.jpg.webp").is_file(), True)
-            self.assertTrue((root / "m" / "photo.jpg.webp").is_file())
+            self.assertEqual((root / "l" / "photo.jpg.png").is_file(), True)
+            self.assertEqual((root / "t" / "photo.jpg.png").is_file(), True)
+            self.assertTrue((root / "m" / "photo.jpg.png").is_file())
 
             Image.new("RGB", (640, 480), "blue").save(self.media / "event" / "new-photo.jpg")
-            (root / "t" / "photo.jpg.webp").unlink()
+            (root / "t" / "photo.jpg.png").unlink()
             worker.scan_once()
             index = json.loads((root / "index.json").read_text(encoding="utf-8"))
             self.assertEqual([item["n"] for item in index["items"]], ["new-photo.jpg", "photo.jpg"])
-            self.assertTrue((root / "m" / "new-photo.jpg.webp").is_file())
-            self.assertTrue((root / "t" / "new-photo.jpg.webp").is_file())
-            self.assertTrue((root / "t" / "photo.jpg.webp").is_file())
+            self.assertTrue((root / "m" / "new-photo.jpg.png").is_file())
+            self.assertTrue((root / "t" / "new-photo.jpg.png").is_file())
+            self.assertTrue((root / "t" / "photo.jpg.png").is_file())
 
     def test_scan_rebuilds_photo_cache_from_an_older_version(self):
         source = self.media / "event" / "photo.jpg"
         stat = source.stat()
         root = self.cache / "summer"
         for directory in ("t", "m", "l"):
-            rendition = root / directory / "photo.jpg.webp"
+            rendition = root / directory / "photo.jpg.png"
             rendition.parent.mkdir(parents=True, exist_ok=True)
             rendition.write_bytes(b"old rendition")
+        legacy = root / "l" / "photo.jpg.webp"
+        legacy.write_bytes(b"old webp rendition")
         (root / "index.json").parent.mkdir(parents=True, exist_ok=True)
         (root / "index.json").write_text(
             json.dumps(
@@ -161,8 +164,9 @@ class WorkerTests(unittest.TestCase):
 
         index = json.loads((root / "index.json").read_text(encoding="utf-8"))
         self.assertEqual(index["items"][0]["photo_version"], worker.PHOTO_CACHE_VERSION)
-        with Image.open(root / "l" / "photo.jpg.webp") as rendition:
-            self.assertEqual(rendition.format, "WEBP")
+        with Image.open(root / "l" / "photo.jpg.png") as rendition:
+            self.assertEqual(rendition.format, "PNG")
+        self.assertFalse(legacy.exists())
 
     def test_scan_publishes_processed_photos_before_later_media_finishes(self):
         Image.new("RGB", (640, 480), "blue").save(self.media / "event" / "second.jpg")
@@ -197,7 +201,7 @@ class WorkerTests(unittest.TestCase):
             [item["n"] for item in index["items"]],
             ["Ceremonie/photo.jpg", "photo.jpg"],
         )
-        self.assertTrue((self.cache / "summer" / "t" / "Ceremonie" / "photo.jpg.webp").is_file())
+        self.assertTrue((self.cache / "summer" / "t" / "Ceremonie" / "photo.jpg.png").is_file())
         status = json.loads((self.data / "worker-status.json").read_text(encoding="utf-8"))
         self.assertEqual(status["state"], "idle")
         self.assertEqual(status["last_scan"] > 0, True)
@@ -244,7 +248,7 @@ class WorkerTests(unittest.TestCase):
 
         with patch.object(worker, "CACHE", self.cache), patch.object(
             worker, "run_ffmpeg", side_effect=fake_ffmpeg
-        ) as run_ffmpeg, patch.object(worker, "make_webp", return_value=(1280, 720)):
+        ) as run_ffmpeg, patch.object(worker, "make_png", return_value=(1280, 720)):
             worker.process_media(source, "summer", source.name, "video")
 
         self.assertEqual(run_ffmpeg.call_count, 4)

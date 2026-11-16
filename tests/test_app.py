@@ -29,8 +29,8 @@ class GalleryAppTests(unittest.TestCase):
             json.dumps({"items": [{"n": "photo one.jpg", "type": "image", "w": 10, "h": 8}]}),
             encoding="utf-8",
         )
-        (self.cache / "event-one" / "t" / "photo one.jpg.webp").write_bytes(b"thumb")
-        (self.cache / "event-one" / "l" / "photo one.jpg.webp").write_bytes(b"large")
+        (self.cache / "event-one" / "t" / "photo one.jpg.png").write_bytes(b"thumb")
+        (self.cache / "event-one" / "l" / "photo one.jpg.png").write_bytes(b"large")
         (self.media / "event" / "photo one.jpg").write_bytes(b"original")
         self.app = create_app(
             data_dir=self.data,
@@ -61,6 +61,7 @@ class GalleryAppTests(unittest.TestCase):
         response = self.client.get("/m/event-one/t/photo%20one.jpg")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, b"thumb")
+        self.assertEqual(response.mimetype, "image/png")
         self.assertEqual(response.headers["Cache-Control"], "private, no-store")
         response.close()
         response = self.client.get("/m/event-one/t/photo%20one.jpg?v=123-2")
@@ -82,7 +83,7 @@ class GalleryAppTests(unittest.TestCase):
         index_path.write_text(json.dumps(index), encoding="utf-8")
         for directory in ("t", "m", "l", "v360", "v", "v1080"):
             path = self.cache / "event-one" / directory / (
-                "clip.mp4.mp4" if directory.startswith("v") else "photo one.jpg.webp"
+                "clip.mp4.mp4" if directory.startswith("v") else "photo one.jpg.png"
             )
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(directory.encode("ascii"))
@@ -131,7 +132,12 @@ class GalleryAppTests(unittest.TestCase):
         admin = admin_app.test_client()
         admin.post("/api/admin/login", json={"password": "admin-password-for-tests-at-least-24"})
         for directory, suffix in (
+            ("t", ".png"),
+            ("m", ".png"),
+            ("l", ".png"),
+            ("t", ".webp"),
             ("m", ".webp"),
+            ("l", ".webp"),
             ("v360", ".mp4"),
             ("v", ".mp4"),
             ("v1080", ".mp4"),
@@ -146,7 +152,12 @@ class GalleryAppTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         for directory, suffix in (
+            ("t", ".png"),
+            ("m", ".png"),
+            ("l", ".png"),
+            ("t", ".webp"),
             ("m", ".webp"),
+            ("l", ".webp"),
             ("v360", ".mp4"),
             ("v", ".mp4"),
             ("v1080", ".mp4"),
@@ -203,8 +214,8 @@ class GalleryAppTests(unittest.TestCase):
         (nested / "photo.jpg").write_bytes(b"nested original")
         (self.cache / "event-one" / "t" / "Ceremonie").mkdir()
         (self.cache / "event-one" / "l" / "Ceremonie").mkdir()
-        (self.cache / "event-one" / "t" / "Ceremonie" / "photo.jpg.webp").write_bytes(b"nested thumb")
-        (self.cache / "event-one" / "l" / "Ceremonie" / "photo.jpg.webp").write_bytes(b"nested large")
+        (self.cache / "event-one" / "t" / "Ceremonie" / "photo.jpg.png").write_bytes(b"nested thumb")
+        (self.cache / "event-one" / "l" / "Ceremonie" / "photo.jpg.png").write_bytes(b"nested large")
         index_path = self.cache / "event-one" / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8"))
         index["items"].append(
@@ -524,7 +535,7 @@ class GalleryAppTests(unittest.TestCase):
             json.loads((self.cache / "event-one" / "index.json").read_text(encoding="utf-8"))["items"],
             [],
         )
-        self.assertFalse((self.cache / "event-one" / "t" / "photo one.jpg.webp").exists())
+        self.assertFalse((self.cache / "event-one" / "t" / "photo one.jpg.png").exists())
 
     def test_admin_album_creation_rejects_folder_escape(self):
         admin_app = create_app(

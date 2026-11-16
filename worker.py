@@ -27,8 +27,8 @@ STATUS_LOCK = threading.Lock()
 IMAGE_EXTENSIONS = re.compile(r"\.(jpe?g|png|webp|tiff?|heic|avif)$", re.IGNORECASE)
 RAW_EXTENSIONS = re.compile(r"\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$", re.IGNORECASE)
 VIDEO_EXTENSIONS = re.compile(r"\.(mp4|mov|mkv|m4v|avi)$", re.IGNORECASE)
-PHOTO_CACHE_VERSION = 2
-VIDEO_CACHE_VERSION = 5
+PHOTO_CACHE_VERSION = 3
+VIDEO_CACHE_VERSION = 6
 SRGB_PROFILE = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
 SRGB_PROFILE_DATA = SRGB_PROFILE.tobytes()
 
@@ -155,7 +155,7 @@ def run_ffmpeg(args, slug=None):
         )
 
 
-def make_webp(image_source, target, width, quality):
+def make_png(image_source, target, width):
     target.parent.mkdir(parents=True, exist_ok=True)
     source = io.BytesIO(image_source) if isinstance(image_source, bytes) else image_source
     with Image.open(source) as opened:
@@ -170,22 +170,16 @@ def make_webp(image_source, target, width, quality):
             image = image.convert("RGB")
         image.thumbnail((width, width), Image.Resampling.LANCZOS)
         dimensions = image.size
-        image.save(
-            target,
-            "WEBP",
-            quality=quality,
-            method=5,
-            icc_profile=SRGB_PROFILE_DATA,
-        )
+        image.save(target, "PNG", icc_profile=SRGB_PROFILE_DATA)
     return dimensions
 
 
 def process_media(source, slug, name, kind):
     root = CACHE / slug
     relative_name = Path(*Path(name).parts)
-    thumbnail = root / "t" / relative_name.with_name(f"{relative_name.name}.webp")
-    medium = root / "m" / relative_name.with_name(f"{relative_name.name}.webp")
-    large = root / "l" / relative_name.with_name(f"{relative_name.name}.webp")
+    thumbnail = root / "t" / relative_name.with_name(f"{relative_name.name}.png")
+    medium = root / "m" / relative_name.with_name(f"{relative_name.name}.png")
+    large = root / "l" / relative_name.with_name(f"{relative_name.name}.png")
     if kind == "video":
         poster = root / "tmp" / relative_name.with_name(f"{relative_name.name}.jpg")
         poster.parent.mkdir(parents=True, exist_ok=True)
@@ -247,18 +241,21 @@ def process_media(source, slug, name, kind):
     else:
         image_source = source
 
-    large_width, large_height = make_webp(image_source, large, 2560, 95)
-    make_webp(image_source, medium, 1280, 78)
-    make_webp(image_source, thumbnail, 640, 72)
+    large_width, large_height = make_png(image_source, large, 2560)
+    make_png(image_source, medium, 1280)
+    make_png(image_source, thumbnail, 640)
+    for directory in ("t", "m", "l"):
+        legacy = root / directory / relative_name.with_name(f"{relative_name.name}.webp")
+        legacy.unlink(missing_ok=True)
     return {"w": large_width, "h": large_height}
 
 
 def cache_is_complete(root, name, kind):
     relative_name = Path(*Path(name).parts)
     expected = [
-        root / "t" / relative_name.with_name(f"{relative_name.name}.webp"),
-        root / "m" / relative_name.with_name(f"{relative_name.name}.webp"),
-        root / "l" / relative_name.with_name(f"{relative_name.name}.webp"),
+        root / "t" / relative_name.with_name(f"{relative_name.name}.png"),
+        root / "m" / relative_name.with_name(f"{relative_name.name}.png"),
+        root / "l" / relative_name.with_name(f"{relative_name.name}.png"),
     ]
     if kind == "video":
         expected.append(root / "v" / relative_name.with_name(f"{relative_name.name}.mp4"))
