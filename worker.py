@@ -27,8 +27,8 @@ STATUS_LOCK = threading.Lock()
 IMAGE_EXTENSIONS = re.compile(r"\.(jpe?g|png|webp|tiff?|heic|avif)$", re.IGNORECASE)
 RAW_EXTENSIONS = re.compile(r"\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$", re.IGNORECASE)
 VIDEO_EXTENSIONS = re.compile(r"\.(mp4|mov|mkv|m4v|avi)$", re.IGNORECASE)
-PHOTO_CACHE_VERSION = 1
-VIDEO_CACHE_VERSION = 4
+PHOTO_CACHE_VERSION = 2
+VIDEO_CACHE_VERSION = 5
 SRGB_PROFILE = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
 SRGB_PROFILE_DATA = SRGB_PROFILE.tobytes()
 
@@ -247,7 +247,7 @@ def process_media(source, slug, name, kind):
     else:
         image_source = source
 
-    large_width, large_height = make_webp(image_source, large, 2560, 82)
+    large_width, large_height = make_webp(image_source, large, 2560, 95)
     make_webp(image_source, medium, 1280, 78)
     make_webp(image_source, thumbnail, 640, 72)
     return {"w": large_width, "h": large_height}

@@ -86,6 +86,7 @@ class WorkerTests(unittest.TestCase):
                             "h": 360,
                             "m": stat.st_mtime_ns,
                             "size": stat.st_size,
+                            "video_version": worker.VIDEO_CACHE_VERSION - 1,
                         }
                     ]
                 }
@@ -145,6 +146,7 @@ class WorkerTests(unittest.TestCase):
                             "h": 800,
                             "m": stat.st_mtime_ns,
                             "size": stat.st_size,
+                            "photo_version": worker.PHOTO_CACHE_VERSION - 1,
                         }
                     ]
                 }
