@@ -8,7 +8,7 @@ import threading
 import time
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageCms, ImageOps
 
 try:
     import pillow_heif
@@ -27,7 +27,10 @@ STATUS_LOCK = threading.Lock()
 IMAGE_EXTENSIONS = re.compile(r"\.(jpe?g|png|webp|tiff?|heic|avif)$", re.IGNORECASE)
 RAW_EXTENSIONS = re.compile(r"\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$", re.IGNORECASE)
 VIDEO_EXTENSIONS = re.compile(r"\.(mp4|mov|mkv|m4v|avi)$", re.IGNORECASE)
-VIDEO_CACHE_VERSION = 3
+PHOTO_CACHE_VERSION = 1
+VIDEO_CACHE_VERSION = 4
+SRGB_PROFILE = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
+SRGB_PROFILE_DATA = SRGB_PROFILE.tobytes()
 
 
 class AlbumRemoved(Exception):
@@ -156,10 +159,24 @@ def make_webp(image_source, target, width, quality):
     target.parent.mkdir(parents=True, exist_ok=True)
     source = io.BytesIO(image_source) if isinstance(image_source, bytes) else image_source
     with Image.open(source) as opened:
-        image = ImageOps.exif_transpose(opened).convert("RGB")
+        source_profile_data = opened.info.get("icc_profile")
+        image = ImageOps.exif_transpose(opened)
+        if source_profile_data:
+            source_profile = ImageCms.ImageCmsProfile(io.BytesIO(source_profile_data))
+            image = ImageCms.profileToProfile(
+                image, source_profile, SRGB_PROFILE, outputMode="RGB"
+            )
+        else:
+            image = image.convert("RGB")
         image.thumbnail((width, width), Image.Resampling.LANCZOS)
         dimensions = image.size
-        image.save(target, "WEBP", quality=quality, method=5)
+        image.save(
+            target,
+            "WEBP",
+            quality=quality,
+            method=5,
+            icc_profile=SRGB_PROFILE_DATA,
+        )
     return dimensions
 
 
@@ -302,7 +319,13 @@ def scan_album(slug, album):
                 prior
                 and prior.get("m") == stat.st_mtime_ns
                 and prior.get("size") == stat.st_size
-                and (kind != "video" or prior.get("video_version") == VIDEO_CACHE_VERSION)
+                and (
+                    (kind == "video" and prior.get("video_version") == VIDEO_CACHE_VERSION)
+                    or (
+                        kind != "video"
+                        and prior.get("photo_version") == PHOTO_CACHE_VERSION
+                    )
+                )
             )
             if same_source and cache_is_complete(root, name, kind):
                 dimensions = {"w": prior.get("w"), "h": prior.get("h")}
@@ -325,6 +348,8 @@ def scan_album(slug, album):
             }
             if kind == "video":
                 item["video_version"] = VIDEO_CACHE_VERSION
+            else:
+                item["photo_version"] = PHOTO_CACHE_VERSION
             items.append(item)
             write_json_atomic(
                 index_file,

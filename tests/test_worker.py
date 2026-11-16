@@ -1,10 +1,11 @@
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PIL import Image
+from PIL import Image, ImageCms
 
 import worker
 
@@ -25,6 +26,29 @@ class WorkerTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_make_webp_converts_embedded_profile_to_srgb(self):
+        source = self.media / "event" / "profiled.tif"
+        target = self.cache / "summer" / "l" / "profiled.tif.webp"
+        srgb = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
+        lab = ImageCms.ImageCmsProfile(ImageCms.createProfile("LAB"))
+        reference = Image.new("RGB", (32, 24), (210, 80, 40))
+        profiled = ImageCms.profileToProfile(reference, srgb, lab, outputMode="LAB")
+        profiled.save(source, icc_profile=lab.tobytes())
+
+        worker.make_webp(source, target, 64, 100)
+
+        with Image.open(target) as output:
+            output_profile_data = output.info.get("icc_profile")
+            self.assertTrue(output_profile_data)
+            output_profile = ImageCms.ImageCmsProfile(io.BytesIO(output_profile_data))
+            converted = ImageCms.profileToProfile(
+                output, output_profile, srgb, outputMode="RGB"
+            )
+            for actual, expected in zip(
+                converted.getpixel((0, 0)), reference.getpixel((0, 0))
+            ):
+                self.assertLessEqual(abs(actual - expected), 2)
 
     def test_video_cache_requires_every_selectable_resolution(self):
         root = self.cache / "summer"
@@ -100,6 +124,43 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue((root / "m" / "new-photo.jpg.webp").is_file())
             self.assertTrue((root / "t" / "new-photo.jpg.webp").is_file())
             self.assertTrue((root / "t" / "photo.jpg.webp").is_file())
+
+    def test_scan_rebuilds_photo_cache_from_an_older_version(self):
+        source = self.media / "event" / "photo.jpg"
+        stat = source.stat()
+        root = self.cache / "summer"
+        for directory in ("t", "m", "l"):
+            rendition = root / directory / "photo.jpg.webp"
+            rendition.parent.mkdir(parents=True, exist_ok=True)
+            rendition.write_bytes(b"old rendition")
+        (root / "index.json").parent.mkdir(parents=True, exist_ok=True)
+        (root / "index.json").write_text(
+            json.dumps(
+                {
+                    "items": [
+                        {
+                            "n": "photo.jpg",
+                            "type": "image",
+                            "w": 1200,
+                            "h": 800,
+                            "m": stat.st_mtime_ns,
+                            "size": stat.st_size,
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with patch.object(worker, "MEDIA", self.media), patch.object(
+            worker, "CACHE", self.cache
+        ), patch.object(worker, "DATA", self.data):
+            worker.scan_once()
+
+        index = json.loads((root / "index.json").read_text(encoding="utf-8"))
+        self.assertEqual(index["items"][0]["photo_version"], worker.PHOTO_CACHE_VERSION)
+        with Image.open(root / "l" / "photo.jpg.webp") as rendition:
+            self.assertEqual(rendition.format, "WEBP")
 
     def test_scan_publishes_processed_photos_before_later_media_finishes(self):
         Image.new("RGB", (640, 480), "blue").save(self.media / "event" / "second.jpg")
