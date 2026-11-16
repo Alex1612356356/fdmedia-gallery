@@ -1024,6 +1024,11 @@ def create_app(
             sections=[{"id": key, "title": value} for key, value in sorted(section_map.items(), key=lambda pair: pair[1].casefold())],
             cover=cover,
             cover_m=cover_item.get("m") if cover_item else None,
+            cover_version=(
+                cover_item.get("photo_version", cover_item.get("video_version"))
+                if cover_item
+                else None
+            ),
             upload_enabled=request_link_allows_upload(album),
         )
         response.headers["Cache-Control"] = "no-store"
@@ -1233,7 +1238,7 @@ def create_app(
         response = send_file(file_path, conditional=True, as_attachment=kind == "o", download_name=name if kind == "o" else None)
         response.headers["Cache-Control"] = (
             "private, no-store"
-            if kind == "o" or used_fallback
+            if kind == "o" or used_fallback or not request.args.get("v")
             else "private, max-age=31536000, immutable"
         )
         return response

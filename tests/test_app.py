@@ -61,6 +61,13 @@ class GalleryAppTests(unittest.TestCase):
         response = self.client.get("/m/event-one/t/photo%20one.jpg")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, b"thumb")
+        self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+        response.close()
+        response = self.client.get("/m/event-one/t/photo%20one.jpg?v=123-2")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers["Cache-Control"], "private, max-age=31536000, immutable"
+        )
         response.close()
         response = self.client.get("/m/event-one/o/photo%20one.jpg")
         self.assertEqual(response.status_code, 200)
@@ -201,7 +208,14 @@ class GalleryAppTests(unittest.TestCase):
         index_path = self.cache / "event-one" / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8"))
         index["items"].append(
-            {"n": "Ceremonie/photo.jpg", "type": "image", "w": 10, "h": 8, "m": 123}
+            {
+                "n": "Ceremonie/photo.jpg",
+                "type": "image",
+                "w": 10,
+                "h": 8,
+                "m": 123,
+                "photo_version": 2,
+            }
         )
         index_path.write_text(json.dumps(index), encoding="utf-8")
         albums_path = self.data / "albums.json"
@@ -216,6 +230,7 @@ class GalleryAppTests(unittest.TestCase):
         self.assertEqual(nested_item["section"], "Ceremonie")
         self.assertEqual(response.json["cover"], "Ceremonie/photo.jpg")
         self.assertEqual(response.json["cover_m"], nested_item["m"])
+        self.assertEqual(response.json["cover_version"], nested_item["photo_version"])
         media_response = self.client.get("/m/event-one/t/Ceremonie%2Fphoto.jpg")
         self.assertEqual(media_response.status_code, 200)
         self.assertEqual(media_response.data, b"nested thumb")

@@ -24,12 +24,21 @@ const api = (p, o = {}) => {
   if (shareLink) endpoint.searchParams.set('link', shareLink);
   return fetch(endpoint, { credentials: 'same-origin', cache: 'no-store', ...o });
 };
-const url = (k, n, m) => `/m/${slug}/${k}/${encodeURIComponent(n)}${m === undefined ? '' : `?v=${encodeURIComponent(m)}`}`;
+const url = (k, n, m, version) => {
+  const cacheKey = [m, version].filter(value => value !== undefined && value !== null).join('-');
+  return `/m/${slug}/${k}/${encodeURIComponent(n)}${cacheKey ? `?v=${encodeURIComponent(cacheKey)}` : ''}`;
+};
+const renditionVersion = item => item.type === 'video' ? item.video_version : item.photo_version;
 
 function updateResolutionLinks() {
   grid.querySelectorAll('.ph-link').forEach(link => {
     const item = visible()[Number(link.dataset.i)];
-    if (item) link.href = url(item.type === 'video' ? videoResolution : photoResolution, item.n, item.m);
+    if (item) link.href = url(
+      item.type === 'video' ? videoResolution : photoResolution,
+      item.n,
+      item.m,
+      renditionVersion(item),
+    );
   });
 }
 
@@ -153,7 +162,7 @@ async function load() {
     document.documentElement.dataset.theme = d.theme || 'default';
     const cover = $('#heroCover');
     if (d.cover) {
-      $('#coverImage').src = url('t', d.cover, d.cover_m);
+      $('#coverImage').src = url('t', d.cover, d.cover_m, d.cover_version);
       $('#coverImage').dataset.name = d.cover;
       $('#coverImage').alt = '';
       cover.hidden = false;
@@ -274,11 +283,16 @@ function render() {
     const link = document.createElement('a');
     link.className = 'ph-link';
     link.dataset.i = i;
-    link.href = url(it.type === 'video' ? videoResolution : photoResolution, it.n, it.m);
+    link.href = url(
+      it.type === 'video' ? videoResolution : photoResolution,
+      it.n,
+      it.m,
+      renditionVersion(it),
+    );
     link.dataset.pswpWidth = it.w; link.dataset.pswpHeight = it.h;
     const image = document.createElement('img');
     image.alt = it.type === 'video' ? `Previzualizare videoclip: ${it.n}` : `Fotografie: ${it.n}`;
-    image.dataset.src = url('t', it.n, it.m);
+    image.dataset.src = url('t', it.n, it.m, renditionVersion(it));
     link.append(image);
     const heart = document.createElement('button');
     heart.className = `heart ${favs.has(it.n) ? 'on' : ''}`;
@@ -379,7 +393,7 @@ function initLightbox() {
   });
   // Video slides
   lb.addFilter('itemData', d => { const it = visible()[+d.element?.dataset.i]; if (it?.type === 'video')
-    return { ...d, type: 'video', videoSrc: url(videoResolution, it.n, it.m), poster: url(photoResolution, it.n, it.m) }; return d; });
+    return { ...d, type: 'video', videoSrc: url(videoResolution, it.n, it.m, renditionVersion(it)), poster: url(photoResolution, it.n, it.m, renditionVersion(it)) }; return d; });
   lb.on('contentLoad', e => { const { content } = e; if (content.data.type !== 'video') return; e.preventDefault();
     content.element = Object.assign(document.createElement('video'), { className: 'pswp__video', controls: true, playsInline: true, preload: 'metadata', poster: content.data.poster, src: content.data.videoSrc });
     content.onLoaded(); });
@@ -401,7 +415,9 @@ async function refreshGallery() {
     const nextItems = Array.isArray(data.items) ? data.items : [];
     uploadAllowed = data.upload_enabled === true;
     updateUploadPanel();
-    const fingerprint = list => JSON.stringify(list.map(item => [item.n, item.m, item.size]));
+    const fingerprint = list => JSON.stringify(list.map(item => [
+      item.n, item.m, item.size, item.photo_version, item.video_version,
+    ]));
     const metadataChanged = (data.theme || 'default') !== document.documentElement.dataset.theme
       || (data.cover || null) !== $('#coverImage').dataset.name
       || JSON.stringify(data.sections || []) !== JSON.stringify(sections);
@@ -413,7 +429,7 @@ async function refreshGallery() {
     $('#hero').dataset.theme = data.theme || 'default';
     $('#coverImage').dataset.name = data.cover || '';
     if (data.cover) {
-      $('#coverImage').src = url('t', data.cover, data.cover_m);
+      $('#coverImage').src = url('t', data.cover, data.cover_m, data.cover_version);
       $('#heroCover').hidden = false;
     } else {
       $('#coverImage').removeAttribute('src');
