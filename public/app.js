@@ -2,23 +2,10 @@ import PhotoSwipeLightbox from '/vendor/photoswipe-lightbox.esm.min.js';
 const slug = location.pathname.split('/')[2];
 const $ = s => document.querySelector(s), grid = $('#grid');
 let items = [], favs = new Set(), onlyFav = false, isAdmin = false, sections = [], activeSection = 'all';
-let uploadAllowed = false;
 const shareLink = new URLSearchParams(location.search).get('link');
 let imageObserver;
-const photoResolutionKey = `fd-gallery:${slug}:photo-resolution`;
-const videoResolutionKey = `fd-gallery:${slug}:video-resolution`;
-const photoResolutions = ['t', 'm', 'l'];
-const videoResolutions = ['v360', 'v', 'v1080'];
-function savedResolution(key, choices, fallback) {
-  try {
-    const saved = localStorage.getItem(key);
-    return choices.includes(saved) ? saved : fallback;
-  } catch {
-    return fallback;
-  }
-}
-let photoResolution = savedResolution(photoResolutionKey, photoResolutions, 'l');
-let videoResolution = savedResolution(videoResolutionKey, videoResolutions, 'v');
+const PHOTO_RENDITION = 'l';
+const VIDEO_RENDITION = 'v';
 const api = (p, o = {}) => {
   const endpoint = new URL(`/api/${encodeURIComponent(slug)}/${p}`, location.origin);
   if (shareLink) endpoint.searchParams.set('link', shareLink);
@@ -29,101 +16,6 @@ const url = (k, n, m, version) => {
   return `/m/${slug}/${k}/${encodeURIComponent(n)}${cacheKey ? `?v=${encodeURIComponent(cacheKey)}` : ''}`;
 };
 const renditionVersion = item => item.type === 'video' ? item.video_version : item.photo_version;
-
-function updateResolutionLinks() {
-  grid.querySelectorAll('.ph-link').forEach(link => {
-    const item = visible()[Number(link.dataset.i)];
-    if (item) link.href = url(
-      item.type === 'video' ? videoResolution : photoResolution,
-      item.n,
-      item.m,
-      renditionVersion(item),
-    );
-  });
-}
-
-function setResolution(type, value) {
-  const isVideo = type === 'video';
-  const choices = isVideo ? videoResolutions : photoResolutions;
-  if (!choices.includes(value)) return;
-  if (isVideo) videoResolution = value;
-  else photoResolution = value;
-  try {
-    localStorage.setItem(isVideo ? videoResolutionKey : photoResolutionKey, value);
-  } catch {
-    $('#galleryNotice').textContent = 'Alegerea a fost aplicată, dar nu poate fi salvată în acest browser.';
-  }
-  updateResolutionLinks();
-}
-
-function updateUploadPanel() {
-  const enabled = isAdmin || uploadAllowed;
-  $('#galleryUpload').hidden = !enabled;
-  $('#galleryUploadTitle').textContent = isAdmin
-    ? 'Încarcă în galeria ta'
-    : 'Trimite fotografii galeriei';
-  $('#galleryUploadHelp').textContent = isAdmin
-    ? 'Fișierele vor fi adăugate direct în această galerie.'
-    : 'Trage fotografiile și videoclipurile aici sau selectează-le de pe dispozitiv.';
-}
-
-function uploadGalleryFiles(files) {
-  if (!files.length) return;
-  const form = new FormData();
-  for (const file of files) form.append('files', file, file.name);
-  const progress = $('#galleryUploadProgress');
-  const progressBar = $('#galleryUploadProgressBar');
-  const progressLabel = $('#galleryUploadProgressLabel');
-  const message = $('#galleryUploadMessage');
-  progress.hidden = false;
-  progressBar.style.width = '0%';
-  progressLabel.textContent = `Se pregătesc ${files.length} fișier(e)...`;
-  message.textContent = '';
-  message.classList.remove('gallery-upload-error');
-
-  const endpoint = isAdmin
-    ? new URL(`/api/admin/albums/${encodeURIComponent(slug)}/upload`, location.origin)
-    : new URL(`/api/${encodeURIComponent(slug)}/upload`, location.origin);
-  if (!isAdmin && shareLink) endpoint.searchParams.set('link', shareLink);
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', endpoint);
-  xhr.withCredentials = true;
-  xhr.upload.addEventListener('progress', event => {
-    if (!event.lengthComputable) return;
-    const percent = Math.round(event.loaded / event.total * 100);
-    progressBar.style.width = `${percent}%`;
-    progressLabel.textContent = `Se încarcă... ${percent}%`;
-  });
-  xhr.addEventListener('load', () => {
-    let result = {};
-    try { result = JSON.parse(xhr.responseText); } catch { /* The server returned a non-JSON response. */ }
-    progress.hidden = true;
-    if (xhr.status === 401) {
-      $('#gate').hidden = false;
-      $('#err').textContent = 'Sesiunea a expirat. Introduceți din nou PIN-ul galeriei.';
-      return;
-    }
-    if (xhr.status < 200 || xhr.status >= 300) {
-      message.textContent = result.error || 'Nu am putut încărca fișierele.';
-      message.classList.add('gallery-upload-error');
-      return;
-    }
-    $('#galleryFileInput').value = '';
-    message.textContent = `Au fost încărcate ${result.uploaded.length} fișier(e). Vor apărea în galerie după procesare.`;
-    window.setTimeout(refreshGallery, 5000);
-  });
-  xhr.addEventListener('error', () => {
-    progress.hidden = true;
-    message.textContent = 'Nu am putut încărca fișierele. Verificați conexiunea și spațiul disponibil pe server.';
-    message.classList.add('gallery-upload-error');
-  });
-  xhr.addEventListener('abort', () => {
-    progress.hidden = true;
-    message.textContent = 'Încărcarea a fost întreruptă.';
-    message.classList.add('gallery-upload-error');
-  });
-  xhr.send(form);
-}
 
 async function load() {
   try {
@@ -136,7 +28,6 @@ async function load() {
     if (!r.ok) throw new Error(r.status === 404 ? 'Galeria nu a fost găsită. Verificați linkul primit.' : 'Galeria nu este disponibilă momentan. Încercați din nou în câteva clipe.');
     const d = await r.json();
     items = Array.isArray(d.items) ? d.items : [];
-    uploadAllowed = d.upload_enabled === true;
     favs = new Set(Array.isArray(d.favs) ? d.favs : []);
     sections = Array.isArray(d.sections) ? d.sections : [];
     activeSection = 'all';
@@ -154,7 +45,6 @@ async function load() {
       isAdmin = false;
       $('#galleryNotice').textContent = 'Nu am putut verifica permisiunile administratorului; comenzile de administrare sunt ascunse.';
     }
-    updateUploadPanel();
     $('#gate').hidden = true; $('#hero').hidden = false;
     $('#title').textContent = d.title || 'Galerie foto';
     $('#description').textContent = d.description || 'Am păstrat aici momentele voastre. Bucurați-vă de ele.';
@@ -284,7 +174,7 @@ function render() {
     link.className = 'ph-link';
     link.dataset.i = i;
     link.href = url(
-      it.type === 'video' ? videoResolution : photoResolution,
+      it.type === 'video' ? VIDEO_RENDITION : PHOTO_RENDITION,
       it.n,
       it.m,
       renditionVersion(it),
@@ -393,7 +283,7 @@ function initLightbox() {
   });
   // Video slides
   lb.addFilter('itemData', d => { const it = visible()[+d.element?.dataset.i]; if (it?.type === 'video')
-    return { ...d, type: 'video', videoSrc: url(videoResolution, it.n, it.m, renditionVersion(it)), poster: url(photoResolution, it.n, it.m, renditionVersion(it)) }; return d; });
+    return { ...d, type: 'video', videoSrc: url(VIDEO_RENDITION, it.n, it.m, renditionVersion(it)), poster: url(PHOTO_RENDITION, it.n, it.m, renditionVersion(it)) }; return d; });
   lb.on('contentLoad', e => { const { content } = e; if (content.data.type !== 'video') return; e.preventDefault();
     content.element = Object.assign(document.createElement('video'), { className: 'pswp__video', controls: true, playsInline: true, preload: 'metadata', poster: content.data.poster, src: content.data.videoSrc });
     content.onLoaded(); });
@@ -413,8 +303,6 @@ async function refreshGallery() {
     if (!response.ok) throw new Error('Nu am putut actualiza galeria.');
     const data = await response.json();
     const nextItems = Array.isArray(data.items) ? data.items : [];
-    uploadAllowed = data.upload_enabled === true;
-    updateUploadPanel();
     const fingerprint = list => JSON.stringify(list.map(item => [
       item.n, item.m, item.size, item.photo_version, item.video_version,
     ]));
@@ -451,28 +339,4 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') refreshGallery();
 });
 $('#filterFav').onclick = () => { onlyFav = !onlyFav; $('#galleryNotice').textContent = ''; render(); };
-$('#photoResolution').value = photoResolution;
-$('#videoResolution').value = videoResolution;
-$('#photoResolution').addEventListener('change', event => setResolution('photo', event.currentTarget.value));
-$('#videoResolution').addEventListener('change', event => setResolution('video', event.currentTarget.value));
-$('#galleryUploadButton').addEventListener('click', () => $('#galleryFileInput').click());
-$('#galleryFileInput').addEventListener('change', event => uploadGalleryFiles([...event.currentTarget.files]));
-const galleryDropzone = $('#galleryDropzone');
-galleryDropzone.addEventListener('dragover', event => {
-  event.preventDefault();
-  galleryDropzone.classList.add('gallery-dropzone-active');
-});
-galleryDropzone.addEventListener('dragleave', () => galleryDropzone.classList.remove('gallery-dropzone-active'));
-galleryDropzone.addEventListener('drop', event => {
-  event.preventDefault();
-  galleryDropzone.classList.remove('gallery-dropzone-active');
-  uploadGalleryFiles([...event.dataTransfer.files]);
-});
-galleryDropzone.addEventListener('click', () => $('#galleryFileInput').click());
-galleryDropzone.addEventListener('keydown', event => {
-  if (event.key === 'Enter' || event.key === ' ') {
-    event.preventDefault();
-    $('#galleryFileInput').click();
-  }
-});
 load();

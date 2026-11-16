@@ -120,6 +120,42 @@ class GalleryAppTests(unittest.TestCase):
         self.assertEqual(response.headers["Cache-Control"], "private, no-store")
         response.close()
 
+    def test_photo_uses_legacy_webp_or_an_available_png_rendition(self):
+        index_path = self.cache / "event-one" / "index.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["items"].extend(
+            [
+                {"n": "legacy.jpg", "type": "image", "w": 640, "h": 360},
+                {"n": "new.jpg", "type": "image", "w": 640, "h": 360},
+                {"n": "missing.jpg", "type": "image", "w": 640, "h": 360},
+            ]
+        )
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        legacy = self.cache / "event-one" / "l" / "legacy.jpg.webp"
+        legacy.write_bytes(b"legacy-webp")
+        fallback = self.cache / "event-one" / "t" / "new.jpg.png"
+        fallback.parent.mkdir(parents=True, exist_ok=True)
+        fallback.write_bytes(b"thumbnail-png")
+
+        self.client.post("/api/event-one/login", json={"pin": "12345678"})
+        legacy_response = self.client.get("/m/event-one/l/legacy.jpg?v=123-2")
+        self.assertEqual(legacy_response.status_code, 200)
+        self.assertEqual(legacy_response.data, b"legacy-webp")
+        self.assertEqual(legacy_response.mimetype, "image/webp")
+        self.assertEqual(legacy_response.headers["Cache-Control"], "private, no-store")
+        legacy_response.close()
+
+        fallback_response = self.client.get("/m/event-one/l/new.jpg?v=123-3")
+        self.assertEqual(fallback_response.status_code, 200)
+        self.assertEqual(fallback_response.data, b"thumbnail-png")
+        self.assertEqual(fallback_response.mimetype, "image/png")
+        self.assertEqual(fallback_response.headers["Cache-Control"], "private, no-store")
+        fallback_response.close()
+
+        missing_response = self.client.get("/m/event-one/l/missing.jpg?v=123-4")
+        self.assertEqual(missing_response.status_code, 404)
+        missing_response.close()
+
     def test_admin_delete_removes_current_and_legacy_media_renditions(self):
         admin_app = create_app(
             data_dir=self.data,

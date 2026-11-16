@@ -1211,32 +1211,46 @@ def create_app(
                 "v1080": "v1080",
             }[kind]
             suffix = ".mp4" if kind.startswith("v") else ".png"
-            file_path = cache_dir / slug / subdir / Path(*relative_name.parts[:-1]) / f"{relative_name.name}{suffix}"
             used_fallback = False
-            if kind.startswith("v") and item.get("type") == "video" and not file_path.is_file():
-                fallback_kinds = {
+            rendition_dirs = (subdir,)
+            extensions = (suffix,)
+            if kind.startswith("v") and item.get("type") == "video":
+                rendition_dirs += {
                     "v360": ("v", "v1080"),
                     "v": ("v360", "v1080"),
                     "v1080": ("v", "v360"),
                 }[kind]
-                for fallback_kind in fallback_kinds:
-                    fallback_path = (
+            elif not kind.startswith("v"):
+                rendition_dirs += {
+                    "t": ("m", "l"),
+                    "m": ("l", "t"),
+                    "l": ("m", "t"),
+                    "p": ("m", "t"),
+                }[kind]
+                extensions = (".png", ".webp")
+
+            file_path = None
+            for rendition_dir in rendition_dirs:
+                for extension in extensions:
+                    candidate = (
                         cache_dir
                         / slug
-                        / fallback_kind
+                        / rendition_dir
                         / Path(*relative_name.parts[:-1])
-                        / f"{relative_name.name}.mp4"
+                        / f"{relative_name.name}{extension}"
                     )
-                    if fallback_path.is_file():
-                        file_path = fallback_path
-                        used_fallback = True
+                    if candidate.is_file():
+                        file_path = candidate
+                        used_fallback = rendition_dir != subdir or extension != suffix
                         break
+                if file_path is not None:
+                    break
         elif kind == "o":
             file_path = album_source_file(album, name)
             used_fallback = False
         else:
             abort(404)
-        if not file_path.is_file():
+        if file_path is None or not file_path.is_file():
             abort(404)
         response = send_file(file_path, conditional=True, as_attachment=kind == "o", download_name=name if kind == "o" else None)
         response.headers["Cache-Control"] = (
