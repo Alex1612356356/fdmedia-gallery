@@ -82,6 +82,18 @@ class WorkerTests(unittest.TestCase):
                 expected.getpixel((0, 0)),
             )
 
+    def test_make_webp_preserves_adobe_rgb_source_profile_and_pixels(self):
+        source = self.media / "event" / "adobe.png"
+        target = self.cache / "summer" / "l" / "adobe.png.webp"
+        reference = Image.new("RGB", (8, 8), (183, 81, 46))
+        reference.save(source, icc_profile=worker.ADOBE_RGB_PROFILE_DATA)
+
+        worker.make_webp(source, target, 64)
+
+        with Image.open(target) as output:
+            self.assertEqual(output.info.get("icc_profile"), worker.ADOBE_RGB_PROFILE_DATA)
+            self.assertEqual(output.convert("RGB").getpixel((0, 0)), (183, 81, 46))
+
     def test_video_cache_requires_every_selectable_resolution(self):
         root = self.cache / "summer"
         name = "clip.mp4"

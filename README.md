@@ -393,6 +393,7 @@ The worker handles common JPEG/PNG/WebP/TIFF/HEIC/AVIF images, several RAW
 formats with embedded JPEG previews, and MP4/MOV/MKV/M4V/AVI video using
 ExifTool and ffmpeg. RAW files without an embedded JPEG preview are skipped.
 Photo renditions are stored as lossless WebP with an Adobe RGB (1998) color
-profile. Sources without an embedded profile are treated as sRGB before conversion.
+profile. Sources already tagged Adobe RGB keep their original ICC profile and
+pixel values; sources without an embedded profile are treated as sRGB before conversion.
 Initial video conversion and large libraries can use substantial CPU, storage,
 and time.

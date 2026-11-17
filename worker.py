@@ -28,7 +28,7 @@ STATUS_LOCK = threading.Lock()
 IMAGE_EXTENSIONS = re.compile(r"\.(jpe?g|png|webp|tiff?|heic|avif)$", re.IGNORECASE)
 RAW_EXTENSIONS = re.compile(r"\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$", re.IGNORECASE)
 VIDEO_EXTENSIONS = re.compile(r"\.(mp4|mov|mkv|m4v|avi)$", re.IGNORECASE)
-PHOTO_CACHE_VERSION = 5
+PHOTO_CACHE_VERSION = 6
 VIDEO_CACHE_VERSION = 6
 SRGB_PROFILE = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
 
@@ -236,14 +236,25 @@ def make_webp(image_source, target, width):
     with Image.open(source) as opened:
         source_profile_data = opened.info.get("icc_profile")
         image = ImageOps.exif_transpose(opened)
+        output_profile_data = ADOBE_RGB_PROFILE_DATA
         if source_profile_data:
             source_profile = ImageCms.ImageCmsProfile(io.BytesIO(source_profile_data))
+            if (
+                image.mode == "RGB"
+                and source_profile.profile.xcolor_space == "RGB "
+                and ImageCms.getProfileDescription(source_profile).strip()
+                == "Adobe RGB (1998)"
+            ):
+                output_profile_data = source_profile_data
+            else:
+                image = ImageCms.profileToProfile(
+                    image, source_profile, ADOBE_RGB_PROFILE, outputMode="RGB"
+                )
         else:
             image = image.convert("RGB")
-            source_profile = SRGB_PROFILE
-        image = ImageCms.profileToProfile(
-            image, source_profile, ADOBE_RGB_PROFILE, outputMode="RGB"
-        )
+            image = ImageCms.profileToProfile(
+                image, SRGB_PROFILE, ADOBE_RGB_PROFILE, outputMode="RGB"
+            )
         image.thumbnail((width, width), Image.Resampling.LANCZOS)
         dimensions = image.size
         image.save(
@@ -251,7 +262,7 @@ def make_webp(image_source, target, width):
             "WEBP",
             lossless=True,
             method=6,
-            icc_profile=ADOBE_RGB_PROFILE_DATA,
+            icc_profile=output_profile_data,
         )
     return dimensions
 
