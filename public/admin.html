@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#090909">
 <title>Administrare galerii — fdmedia.studio</title>
-<link rel="stylesheet" href="/static/style.css?v=1.1.0">
+<link rel="stylesheet" href="/static/style.css?v=1.1.1">
 </head>
 <body class="admin-page">
 <header class="top">
@@ -47,6 +47,10 @@
       <p id="workerStatusSummary">Se verifică starea workerului...</p>
       <p id="workerStatusDetails" class="field-help"></p>
       <p id="workerStatusError" class="field-help" role="status"></p>
+      <div class="worker-status-actions">
+        <button id="manualScanButton" class="album-theme-save" type="button">Scanează acum</button>
+        <p id="manualScanMessage" class="field-help" role="status" aria-live="polite"></p>
+      </div>
     </section>
     <div id="albumList" class="album-list" aria-live="polite"></div>
     <section class="admin-panel create-panel">
@@ -88,6 +92,6 @@
     </section>
   </section>
 </main>
-<script type="module" src="/static/admin.js?v=1.2.1"></script>
+<script type="module" src="/static/admin.js?v=1.2.2"></script>
 </body>
 </html>

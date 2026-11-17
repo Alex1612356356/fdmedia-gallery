@@ -30,6 +30,7 @@ RAW_EXTENSIONS = re.compile(r"\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$", re.IGNORECA
 VIDEO_EXTENSIONS = re.compile(r"\.(mp4|mov|mkv|m4v|avi)$", re.IGNORECASE)
 PHOTO_CACHE_VERSION = 6
 VIDEO_CACHE_VERSION = 6
+MANUAL_SCAN_REQUEST = "manual-scan-request"
 SRGB_PROFILE = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
 
 
@@ -523,6 +524,19 @@ def scan_once():
     )
 
 
+def wait_for_manual_scan_request():
+    deadline = time.monotonic() + INTERVAL
+    request_path = DATA / MANUAL_SCAN_REQUEST
+    while time.monotonic() < deadline:
+        if request_path.is_file():
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(min(1, remaining))
+
+
+
 def main():
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
     heartbeat_stop = threading.Event()
@@ -536,12 +550,20 @@ def main():
 
     threading.Thread(target=heartbeat, name="worker-heartbeat", daemon=True).start()
     while True:
+        request_path = DATA / MANUAL_SCAN_REQUEST
+        manual_request = request_path.is_file()
         try:
             scan_once()
         except (OSError, ValueError) as exc:
             LOG.error("scan failed: %s", exc)
             update_worker_status(state="error", last_error=str(exc))
-        time.sleep(INTERVAL)
+        finally:
+            if manual_request:
+                try:
+                    request_path.unlink(missing_ok=True)
+                except OSError:
+                    LOG.exception("could not clear manual scan request")
+        wait_for_manual_scan_request()
 
 
 if __name__ == "__main__":

@@ -88,6 +88,16 @@ def _album_expired(album):
     return parsed.astimezone(timezone.utc) <= datetime.now(timezone.utc)
 
 
+def _worker_is_alive(status):
+    try:
+        heartbeat = float(status.get("heartbeat"))
+        return time.time() - heartbeat <= max(
+            90, int(os.environ.get("INTERVAL", "30")) * 3
+        )
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
 def _media_relative_path(name):
     if not isinstance(name, str) or not name or "\\" in name:
         return None
@@ -699,14 +709,31 @@ def create_app(
         status = _read_json(data_dir / "worker-status.json", {})
         if not isinstance(status, dict):
             status = {}
-        heartbeat = status.get("heartbeat")
-        try:
-            last_heartbeat = float(heartbeat)
-            alive = time.time() - last_heartbeat <= max(90, int(os.environ.get("INTERVAL", "30")) * 3)
-        except (TypeError, ValueError):
-            alive = False
-        status["alive"] = alive
+        status["alive"] = _worker_is_alive(status)
+        status["scan_requested"] = (data_dir / "manual-scan-request").is_file()
         return jsonify(status)
+
+    @app.post("/api/admin/scan")
+    @require_admin
+    def admin_scan():
+        status = _read_json(data_dir / "worker-status.json", {})
+        if not isinstance(status, dict):
+            status = {}
+        if not _worker_is_alive(status):
+            return jsonify(error="Workerul nu este activ. Verifică serviciul worker."), 503
+        if status.get("state") in ("scanning", "processing"):
+            return jsonify(error="Workerul scanează deja."), 409
+
+        request_path = data_dir / "manual-scan-request"
+        try:
+            with request_path.open("x", encoding="utf-8") as handle:
+                handle.write(f"{time.time()}\n")
+        except FileExistsError:
+            return jsonify(error="O scanare manuală este deja în așteptare."), 409
+        except OSError:
+            log.exception("Could not request a manual media scan")
+            return jsonify(error="Nu am putut programa scanarea."), 500
+        return jsonify(ok=True), 202
 
     @app.get("/api/admin/drive")
     @require_admin

@@ -25,13 +25,15 @@ async function refreshWorkerStatus() {
   const summary = $('#workerStatusSummary');
   const details = $('#workerStatusDetails');
   const errorMessage = $('#workerStatusError');
+  const scanButton = $('#manualScanButton');
   try {
     const response = await api('status');
     if (!response.ok) throw new Error('Nu am putut citi starea workerului.');
     const status = await response.json();
+    const scanning = status.state === 'scanning' || status.state === 'processing';
     if (!status.alive) {
       summary.textContent = 'Workerul nu a raportat recent. Verifică serviciul worker în TrueNAS.';
-    } else if (status.state === 'processing') {
+    } else if (scanning) {
       summary.textContent = `Procesează ${status.current_album || 'galeria'}${status.current_file ? ` · ${status.current_file}` : ''}`;
     } else if (status.state === 'error') {
       summary.textContent = 'Workerul a întâmpinat o eroare.';
@@ -43,12 +45,17 @@ async function refreshWorkerStatus() {
       : '';
     details.textContent = `Ultima scanare completă: ${displayDate(status.last_scan)}${progress}`;
     errorMessage.textContent = status.last_error ? `Ultima eroare: ${status.last_error}` : '';
+    scanButton.disabled = !status.alive || scanning || status.scan_requested;
+    scanButton.textContent = status.scan_requested
+      ? 'Scanare programată'
+      : scanning ? 'Scanare în curs...' : 'Scanează acum';
     $('#workerStatus').classList.toggle('worker-status-error', !status.alive || status.state === 'error');
   } catch (error) {
     summary.textContent = error instanceof TypeError
       ? 'Nu ne-am putut conecta pentru a verifica workerul.'
       : error.message;
     details.textContent = '';
+    scanButton.disabled = true;
     $('#workerStatus').classList.add('worker-status-error');
   }
 }
@@ -441,3 +448,21 @@ loadAdmin();
 window.setInterval(() => {
   if (!dashboard.hidden) refreshWorkerStatus();
 }, 15000);
+
+$('#manualScanButton').addEventListener('click', async () => {
+  const button = $('#manualScanButton');
+  const message = $('#manualScanMessage');
+  button.disabled = true;
+  message.textContent = '';
+  try {
+    const response = await api('scan', { method: 'POST' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Nu am putut programa scanarea.');
+    message.textContent = 'Scanarea a fost programată.';
+  } catch (error) {
+    message.textContent = error instanceof TypeError
+      ? 'Nu ne-am putut conecta la server.'
+      : error.message;
+  }
+  await refreshWorkerStatus();
+});

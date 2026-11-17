@@ -338,6 +338,47 @@ class GalleryAppTests(unittest.TestCase):
         self.assertTrue(status_response.json["alive"])
         self.assertEqual(status_response.json["total"], 5)
 
+    def test_admin_can_request_manual_scan_only_when_worker_is_idle(self):
+        admin_app = create_app(
+            data_dir=self.data,
+            cache_dir=self.cache,
+            media_dir=self.media,
+            secret="test-secret-that-is-at-least-32-bytes",
+            admin_password="admin-password-for-tests-at-least-24",
+            cookie_secure=False,
+        )
+        client = admin_app.test_client()
+        self.assertEqual(client.post("/api/admin/scan").status_code, 401)
+        client.post(
+            "/api/admin/login",
+            json={"password": "admin-password-for-tests-at-least-24"},
+        )
+
+        request_path = self.data / "manual-scan-request"
+        self.assertEqual(client.post("/api/admin/scan").status_code, 503)
+        status_path = self.data / "worker-status.json"
+        status_path.write_text(
+            json.dumps(
+                {"state": "idle", "heartbeat": datetime.now().timestamp()}
+            ),
+            encoding="utf-8",
+        )
+
+        response = client.post("/api/admin/scan")
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(request_path.is_file())
+        self.assertTrue(client.get("/api/admin/status").json["scan_requested"])
+        self.assertEqual(client.post("/api/admin/scan").status_code, 409)
+
+        request_path.unlink()
+        status_path.write_text(
+            json.dumps(
+                {"state": "scanning", "heartbeat": datetime.now().timestamp()}
+            ),
+            encoding="utf-8",
+        )
+        self.assertEqual(client.post("/api/admin/scan").status_code, 409)
+
     def test_admin_can_list_nested_media_folders(self):
         (self.media / "event" / "Ceremonie").mkdir()
         admin_app = create_app(

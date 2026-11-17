@@ -207,6 +207,9 @@ processed before videos so a long video conversion does not delay new photos.
 Processed items are added to the gallery as they finish. Removing an album
 stops its active scan and video conversion. No service restart is needed for
 photo uploads.
+From the admin dashboard, **Manual scan** requests an immediate scan of all
+albums when the worker is idle; the button is unavailable while it is scanning
+or if the worker is offline.
 
 If pulling the image fails with a registry DNS timeout, check resolution from
 the TrueNAS shell:

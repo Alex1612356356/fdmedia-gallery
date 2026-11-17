@@ -272,6 +272,15 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(status["last_scan"] > 0, True)
         self.assertEqual(status["total"], 2)
 
+    def test_manual_scan_request_wakes_worker_wait_immediately(self):
+        (self.data / worker.MANUAL_SCAN_REQUEST).touch()
+        with patch.object(worker, "DATA", self.data), patch.object(
+            worker, "INTERVAL", 30
+        ), patch.object(worker.time, "sleep") as sleep:
+            worker.wait_for_manual_scan_request()
+        sleep.assert_not_called()
+
+
     def test_scan_stops_when_album_is_removed_during_processing(self):
         Image.new("RGB", (640, 480), "blue").save(self.media / "event" / "second.jpg")
 
