@@ -147,7 +147,8 @@ class WorkerTests(unittest.TestCase):
 
         process_media.assert_any_call(source, "summer", "clip.mp4", "video")
         index = json.loads((root / "index.json").read_text(encoding="utf-8"))
-        self.assertEqual(index["items"][0]["video_version"], worker.VIDEO_CACHE_VERSION)
+        video_item = next(item for item in index["items"] if item["n"] == "clip.mp4")
+        self.assertEqual(video_item["video_version"], worker.VIDEO_CACHE_VERSION)
 
     def test_scan_generates_images_and_recovers_missing_cache_files(self):
         with patch.object(worker, "MEDIA", self.media), patch.object(worker, "CACHE", self.cache), patch.object(
@@ -169,6 +170,27 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue((root / "m" / "new-photo.jpg.webp").is_file())
             self.assertTrue((root / "t" / "new-photo.jpg.webp").is_file())
             self.assertTrue((root / "t" / "photo.jpg.webp").is_file())
+
+    def test_scan_processes_photos_before_videos(self):
+        (self.media / "event" / "photo.jpg").unlink()
+        (self.media / "event" / "a-video.mp4").touch()
+        Image.new("RGB", (640, 480), "blue").save(
+            self.media / "event" / "z-photo.jpg"
+        )
+        processed = []
+
+        def process_media(_source, _slug, name, _kind):
+            processed.append(name)
+            return {"w": 640, "h": 480}
+
+        with patch.object(worker, "MEDIA", self.media), patch.object(
+            worker, "CACHE", self.cache
+        ), patch.object(worker, "DATA", self.data), patch.object(
+            worker, "process_media", side_effect=process_media
+        ):
+            worker.scan_once()
+
+        self.assertEqual(processed, ["z-photo.jpg", "a-video.mp4"])
 
     def test_scan_rebuilds_photo_cache_from_an_older_version(self):
         source = self.media / "event" / "photo.jpg"

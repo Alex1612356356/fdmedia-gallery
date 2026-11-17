@@ -383,7 +383,13 @@ def scan_album(slug, album):
         (source for source in source_dir.rglob("*") if source.is_file()),
         key=lambda entry: entry.relative_to(source_dir).as_posix().casefold(),
     )
-    media_sources = [source for source in sources if detect_kind(source.name)]
+    media_sources = sorted(
+        (source for source in sources if detect_kind(source.name)),
+        key=lambda source: (
+            detect_kind(source.name) == "video",
+            source.relative_to(source_dir).as_posix().casefold(),
+        ),
+    )
     update_worker_status(
         state="processing",
         current_album=slug,
