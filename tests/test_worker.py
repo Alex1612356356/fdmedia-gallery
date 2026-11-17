@@ -27,15 +27,15 @@ class WorkerTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_make_webp_preserves_profile_color_values_losslessly(self):
+    def test_make_webp_converts_profiled_source_to_adobe_rgb_losslessly(self):
         source = self.media / "event" / "profiled.tif"
         target = self.cache / "summer" / "l" / "profiled.tif.webp"
         srgb = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
         lab = ImageCms.ImageCmsProfile(ImageCms.createProfile("LAB"))
         reference = Image.new("RGB", (32, 24), (210, 80, 40))
         profiled = ImageCms.profileToProfile(reference, srgb, lab, outputMode="LAB")
-        expected_srgb = ImageCms.profileToProfile(
-            profiled, lab, srgb, outputMode="RGB"
+        expected_adobe_rgb = ImageCms.profileToProfile(
+            profiled, lab, worker.ADOBE_RGB_PROFILE, outputMode="RGB"
         )
         profiled.save(source, icc_profile=lab.tobytes())
 
@@ -47,8 +47,12 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(output_profile_data)
             output_profile = ImageCms.ImageCmsProfile(io.BytesIO(output_profile_data))
             self.assertEqual(
+                ImageCms.getProfileDescription(output_profile).strip(),
+                "Adobe RGB (1998)",
+            )
+            self.assertEqual(
                 output.convert("RGB").getpixel((0, 0)),
-                expected_srgb.getpixel((0, 0)),
+                expected_adobe_rgb.getpixel((0, 0)),
             )
             converted = ImageCms.profileToProfile(
                 output, output_profile, srgb, outputMode="RGB"
@@ -57,6 +61,26 @@ class WorkerTests(unittest.TestCase):
                 converted.getpixel((0, 0)), reference.getpixel((0, 0))
             ):
                 self.assertLessEqual(abs(actual - expected), 2)
+
+    def test_make_webp_assumes_srgb_when_source_has_no_profile(self):
+        source = self.media / "event" / "unprofiled.png"
+        target = self.cache / "summer" / "l" / "unprofiled.png.webp"
+        reference = Image.new("RGB", (8, 8), (210, 80, 40))
+        reference.save(source)
+        expected = ImageCms.profileToProfile(
+            reference,
+            ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")),
+            worker.ADOBE_RGB_PROFILE,
+            outputMode="RGB",
+        )
+
+        worker.make_webp(source, target, 64)
+
+        with Image.open(target) as output:
+            self.assertEqual(
+                output.convert("RGB").getpixel((0, 0)),
+                expected.getpixel((0, 0)),
+            )
 
     def test_video_cache_requires_every_selectable_resolution(self):
         root = self.cache / "summer"

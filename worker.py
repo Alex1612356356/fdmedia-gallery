@@ -3,6 +3,7 @@ import io
 import logging
 import os
 import re
+import struct
 import subprocess
 import threading
 import time
@@ -27,10 +28,84 @@ STATUS_LOCK = threading.Lock()
 IMAGE_EXTENSIONS = re.compile(r"\.(jpe?g|png|webp|tiff?|heic|avif)$", re.IGNORECASE)
 RAW_EXTENSIONS = re.compile(r"\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$", re.IGNORECASE)
 VIDEO_EXTENSIONS = re.compile(r"\.(mp4|mov|mkv|m4v|avi)$", re.IGNORECASE)
-PHOTO_CACHE_VERSION = 4
+PHOTO_CACHE_VERSION = 5
 VIDEO_CACHE_VERSION = 6
 SRGB_PROFILE = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
-SRGB_PROFILE_DATA = SRGB_PROFILE.tobytes()
+
+
+def create_adobe_rgb_profile():
+    def fixed(value):
+        return struct.pack(">i", round(value * 65536))
+
+    def xyz(values):
+        return b"XYZ " + bytes(4) + b"".join(fixed(value) for value in values)
+
+    def curve():
+        return b"curv" + bytes(4) + struct.pack(">I", 1) + struct.pack(">H", round(2.2 * 256))
+
+    def text_tag(kind, value):
+        encoded = value.encode("ascii") + b"\0"
+        return kind + bytes(4) + encoded
+
+    def description(value):
+        encoded = value.encode("ascii") + b"\0"
+        return (
+            b"desc"
+            + bytes(4)
+            + struct.pack(">I", len(encoded))
+            + encoded
+            + bytes(4 + 4 + 2 + 1 + 67)
+        )
+
+    # Adobe RGB (1998) RGB-to-XYZ D50 matrix, with gamma 2.2 curves.
+    matrix = (
+        (0.6097559, 0.2052401, 0.1492240),
+        (0.3111242, 0.6256560, 0.0632197),
+        (0.0194811, 0.0608902, 0.7448387),
+    )
+    tags = {
+        "desc": description("Adobe RGB (1998)"),
+        "cprt": text_tag(
+            b"text", "Generated from published Adobe RGB (1998) color-space values."
+        ),
+        "wtpt": xyz((0.9642, 1.0, 0.8249)),
+        "rXYZ": xyz(tuple(row[0] for row in matrix)),
+        "gXYZ": xyz(tuple(row[1] for row in matrix)),
+        "bXYZ": xyz(tuple(row[2] for row in matrix)),
+        "rTRC": curve(),
+        "gTRC": curve(),
+        "bTRC": curve(),
+    }
+
+    header = bytearray(128)
+    struct.pack_into(">I", header, 8, 0x02100000)
+    header[12:16] = b"mntr"
+    header[16:20] = b"RGB "
+    header[20:24] = b"XYZ "
+    struct.pack_into(">6H", header, 24, *time.gmtime()[:6])
+    header[36:40] = b"acsp"
+    header[40:44] = b"MSFT"
+    header[48:52] = b"FDMG"
+    header[68:80] = b"".join(fixed(value) for value in (0.9642, 1.0, 0.8249))
+    header[80:84] = b"FDMG"
+
+    entries = bytearray(struct.pack(">I", len(tags)))
+    payload = bytearray()
+    payload_offset = 128 + 4 + 12 * len(tags)
+    for signature, data in sorted(tags.items()):
+        while (payload_offset + len(payload)) % 4:
+            payload.append(0)
+        offset = payload_offset + len(payload)
+        entries.extend(signature.encode("ascii") + struct.pack(">II", offset, len(data)))
+        payload.extend(data)
+
+    profile_data = header + entries + payload
+    struct.pack_into(">I", profile_data, 0, len(profile_data))
+    return ImageCms.ImageCmsProfile(io.BytesIO(profile_data))
+
+
+ADOBE_RGB_PROFILE = create_adobe_rgb_profile()
+ADOBE_RGB_PROFILE_DATA = ADOBE_RGB_PROFILE.tobytes()
 
 
 class AlbumRemoved(Exception):
@@ -163,11 +238,12 @@ def make_webp(image_source, target, width):
         image = ImageOps.exif_transpose(opened)
         if source_profile_data:
             source_profile = ImageCms.ImageCmsProfile(io.BytesIO(source_profile_data))
-            image = ImageCms.profileToProfile(
-                image, source_profile, SRGB_PROFILE, outputMode="RGB"
-            )
         else:
             image = image.convert("RGB")
+            source_profile = SRGB_PROFILE
+        image = ImageCms.profileToProfile(
+            image, source_profile, ADOBE_RGB_PROFILE, outputMode="RGB"
+        )
         image.thumbnail((width, width), Image.Resampling.LANCZOS)
         dimensions = image.size
         image.save(
@@ -175,7 +251,7 @@ def make_webp(image_source, target, width):
             "WEBP",
             lossless=True,
             method=6,
-            icc_profile=SRGB_PROFILE_DATA,
+            icc_profile=ADOBE_RGB_PROFILE_DATA,
         )
     return dimensions
 
