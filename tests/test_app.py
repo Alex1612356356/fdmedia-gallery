@@ -644,7 +644,7 @@ class GalleryAppTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_admin_creates_gallery_folder_and_manages_pin_protected_upload_links(self):
+    def test_admin_creates_gallery_folder_and_view_only_links(self):
         admin_app = create_app(
             data_dir=self.data,
             cache_dir=self.cache,
@@ -655,13 +655,7 @@ class GalleryAppTests(unittest.TestCase):
         )
         admin_app.config["TESTING"] = True
         admin = admin_app.test_client()
-        self.assertEqual(
-            admin.post(
-                "/api/admin/albums/new-gallery/links",
-                json={"allow_upload": True},
-            ).status_code,
-            401,
-        )
+        self.assertEqual(admin.post("/api/admin/albums/new-gallery/links").status_code, 401)
         admin.post("/api/admin/login", json={"password": "admin-password-for-tests-at-least-24"})
         created = admin.post(
             "/api/admin/albums",
@@ -675,157 +669,63 @@ class GalleryAppTests(unittest.TestCase):
         self.assertEqual(created.status_code, 201)
         self.assertTrue((self.media / "new-gallery").is_dir())
 
-        upload_link = admin.post(
+        legacy_link_id = "A" * 24
+        albums_path = self.data / "albums.json"
+        albums = json.loads(albums_path.read_text(encoding="utf-8"))
+        albums["new-gallery"]["links"] = [
+            {"id": legacy_link_id, "allow_upload": True}
+        ]
+        albums_path.write_text(json.dumps(albums), encoding="utf-8")
+        new_link = admin.post(
             "/api/admin/albums/new-gallery/links",
             json={"allow_upload": True},
         )
-        view_link = admin.post(
-            "/api/admin/albums/new-gallery/links",
-            json={"allow_upload": False},
-        )
-        self.assertEqual(upload_link.status_code, 200)
-        self.assertEqual(view_link.status_code, 200)
-        upload_id = upload_link.json["link"]["id"]
-        view_id = view_link.json["link"]["id"]
-        self.assertNotEqual(upload_id, view_id)
+        self.assertEqual(new_link.status_code, 200)
+        self.assertEqual(set(new_link.json["link"]), {"id"})
+        new_link_id = new_link.json["link"]["id"]
         new_gallery = next(
             album for album in admin.get("/api/admin/albums").json if album["slug"] == "new-gallery"
         )
         self.assertEqual(
-            {link["id"]: link["allow_upload"] for link in new_gallery["links"]},
-            {upload_id: True, view_id: False},
+            {link["id"] for link in new_gallery["links"]},
+            {legacy_link_id, new_link_id},
         )
 
         visitor = admin_app.test_client()
         self.assertEqual(
-            visitor.post(
-                "/api/new-gallery/upload?link=" + upload_id,
-                data={"files": (BytesIO(b"photo"), "photo.jpg")},
-                content_type="multipart/form-data",
-            ).status_code,
-            401,
-        )
-        self.assertEqual(
             visitor.post("/api/new-gallery/login", json={"pin": "98765432"}).status_code,
             200,
         )
-        self.assertTrue(visitor.get(f"/api/new-gallery/items?link={upload_id}").json["upload_enabled"])
-        self.assertFalse(visitor.get(f"/api/new-gallery/items?link={view_id}").json["upload_enabled"])
-        self.assertFalse(visitor.get("/api/new-gallery/items").json["upload_enabled"])
+        items = visitor.get(f"/api/new-gallery/items?link={legacy_link_id}")
+        self.assertEqual(items.status_code, 200)
+        self.assertNotIn("upload_enabled", items.json)
         self.assertEqual(
             visitor.post(
-                f"/api/new-gallery/upload?link={view_id}",
-                data={"files": (BytesIO(b"photo"), "view-only.jpg")},
-                content_type="multipart/form-data",
-            ).status_code,
-            403,
-        )
-        self.assertEqual(
-            visitor.post(
-                f"/api/new-gallery/upload?link={upload_id}",
+                f"/api/new-gallery/upload?link={legacy_link_id}",
                 data={"files": (BytesIO(b"photo"), "photo.jpg")},
                 content_type="multipart/form-data",
             ).status_code,
-            201,
+            404,
         )
-        self.assertEqual((self.media / "new-gallery" / "photo.jpg").read_bytes(), b"photo")
         self.assertEqual(
-            visitor.post(
-                "/api/new-gallery/upload",
-                data={"files": (BytesIO(b"photo"), "canonical.jpg")},
+            admin.post(
+                "/api/admin/albums/new-gallery/upload",
+                data={"files": (BytesIO(b"photo"), "admin.jpg")},
                 content_type="multipart/form-data",
             ).status_code,
-            403,
+            404,
         )
+        self.assertFalse((self.media / "new-gallery" / "photo.jpg").exists())
+        self.assertFalse((self.media / "new-gallery" / "admin.jpg").exists())
 
-        changed = admin.put(
-            f"/api/admin/albums/new-gallery/links/{view_id}",
-            json={"allow_upload": True},
-        )
-        self.assertEqual(changed.status_code, 200)
-        self.assertTrue(visitor.get(f"/api/new-gallery/items?link={view_id}").json["upload_enabled"])
-        revoked = admin.delete(f"/api/admin/albums/new-gallery/links/{upload_id}")
+        revoked = admin.delete(f"/api/admin/albums/new-gallery/links/{legacy_link_id}")
         self.assertEqual(revoked.status_code, 200)
         self.assertEqual(
-            visitor.post(
-                f"/api/new-gallery/upload?link={upload_id}",
-                data={"files": (BytesIO(b"photo"), "revoked.jpg")},
-                content_type="multipart/form-data",
+            admin.put(
+                f"/api/admin/albums/new-gallery/links/{new_link_id}",
+                json={"allow_upload": True},
             ).status_code,
-            403,
-        )
-
-        admin_upload = admin.post(
-            "/api/admin/albums/new-gallery/upload",
-            data={"files": (BytesIO(b"admin photo"), "admin.jpg")},
-            content_type="multipart/form-data",
-        )
-        self.assertEqual(admin_upload.status_code, 201)
-        self.assertEqual((self.media / "new-gallery" / "admin.jpg").read_bytes(), b"admin photo")
-        self.assertEqual(
-            visitor.post(
-                "/api/admin/albums/new-gallery/upload",
-                data={"files": (BytesIO(b"unauthorized"), "unauthorized.jpg")},
-                content_type="multipart/form-data",
-            ).status_code,
-            401,
-        )
-
-    def test_gallery_upload_rejects_unsupported_and_duplicate_names(self):
-        admin_app = create_app(
-            data_dir=self.data,
-            cache_dir=self.cache,
-            media_dir=self.media,
-            secret="test-secret-that-is-at-least-32-bytes",
-            admin_password="admin-password-for-tests-at-least-24",
-            cookie_secure=False,
-        )
-        admin = admin_app.test_client()
-        admin.post("/api/admin/login", json={"password": "admin-password-for-tests-at-least-24"})
-        unsupported = admin.post(
-            "/api/admin/albums/event-one/upload",
-            data={"files": (BytesIO(b"text"), "notes.txt")},
-            content_type="multipart/form-data",
-        )
-        duplicate = admin.post(
-            "/api/admin/albums/event-one/upload",
-            data={"files": [(BytesIO(b"one"), "same.jpg"), (BytesIO(b"two"), "same.jpg")]},
-            content_type="multipart/form-data",
-        )
-        empty = admin.post(
-            "/api/admin/albums/event-one/upload",
-            data={"files": (BytesIO(b""), "empty.jpg")},
-            content_type="multipart/form-data",
-        )
-        self.assertEqual(unsupported.status_code, 400)
-        self.assertEqual(duplicate.status_code, 400)
-        self.assertEqual(empty.status_code, 400)
-        self.assertFalse((self.media / "event" / "notes.txt").exists())
-        self.assertFalse((self.media / "event" / "same.jpg").exists())
-        self.assertFalse((self.media / "event" / "empty.jpg").exists())
-
-    def test_gallery_upload_enforces_limit_and_removes_staged_files(self):
-        limited_app = create_app(
-            data_dir=self.data,
-            cache_dir=self.cache,
-            media_dir=self.media,
-            secret="test-secret-that-is-at-least-32-bytes",
-            admin_password="admin-password-for-tests-at-least-24",
-            cookie_secure=False,
-            max_drive_upload_bytes=3,
-        )
-        admin = limited_app.test_client()
-        admin.post("/api/admin/login", json={"password": "admin-password-for-tests-at-least-24"})
-        response = admin.post(
-            "/api/admin/albums/event-one/upload",
-            data={"files": (BytesIO(b"four"), "large.jpg")},
-            content_type="multipart/form-data",
-        )
-        self.assertEqual(response.status_code, 413)
-        self.assertFalse((self.media / "event" / "large.jpg").exists())
-        self.assertEqual(
-            [path for path in (self.media / "event").iterdir() if path.name.startswith(".fdmedia-upload-")],
-            [],
+            405,
         )
 
 

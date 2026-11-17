@@ -25,11 +25,6 @@ HEX_64_RE = re.compile(r"^[0-9a-f]{64}$")
 log = logging.getLogger("fdmedia-gallery")
 admin_write_lock = threading.Lock()
 DEFAULT_GALLERY_DESCRIPTION = "Am păstrat aici momentele voastre. Bucurați-vă de ele."
-GALLERY_UPLOAD_EXTENSIONS = {
-    ".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".heic", ".avif",
-    ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
-    ".mp4", ".mov", ".mkv", ".m4v", ".avi",
-}
 
 
 def _read_json(path: Path, default):
@@ -150,7 +145,6 @@ def _album_links(album):
         if isinstance(link, dict)
         and isinstance(link.get("id"), str)
         and re.fullmatch(r"[A-Za-z0-9_-]{20,64}", link["id"])
-        and isinstance(link.get("allow_upload"), bool)
     ]
 
 
@@ -298,73 +292,6 @@ def create_app(
             and _media_relative_path(item["n"]) is not None
         )
 
-    def request_link_allows_upload(album):
-        link_id = request.args.get("link", "")
-        return any(
-            link["id"] == link_id and link["allow_upload"]
-            for link in _album_links(album)
-        )
-
-    def save_gallery_uploads(folder):
-        request.max_content_length = drive_max_upload_bytes + 1024 * 1024
-        uploads = request.files.getlist("files")
-        if not uploads or len(uploads) > 100:
-            return jsonify(error="Selectați între 1 și 100 de fotografii sau videoclipuri."), 400
-        names = [upload.filename for upload in uploads]
-        if (
-            any(
-                not _valid_drive_name(name)
-                or Path(name).suffix.lower() not in GALLERY_UPLOAD_EXTENSIONS
-                for name in names
-            )
-            or len(set(names)) != len(names)
-        ):
-            return jsonify(error="Unul sau mai multe nume sau formate de fișier nu sunt acceptate."), 400
-
-        staged = []
-        uploaded = []
-        committed = []
-        total_size = 0
-        try:
-            with admin_write_lock:
-                for name in names:
-                    if (folder / name).exists():
-                        return jsonify(error=f"Există deja un fișier cu numele „{name}”."), 409
-                for upload, name in zip(uploads, names):
-                    with tempfile.NamedTemporaryFile(
-                        dir=folder, prefix=".fdmedia-upload-", delete=False
-                    ) as temporary:
-                        staged_path = Path(temporary.name)
-                        staged.append((staged_path, folder / name))
-                        file_size = 0
-                        while True:
-                            chunk = upload.stream.read(1024 * 1024)
-                            if not chunk:
-                                break
-                            file_size += len(chunk)
-                            total_size += len(chunk)
-                            if total_size > drive_max_upload_bytes:
-                                return jsonify(error="Încărcarea depășește limita configurată pentru transfer."), 413
-                            temporary.write(chunk)
-                        if file_size == 0:
-                            return jsonify(error=f"Fișierul „{name}” este gol."), 400
-                for staged_path, target in staged:
-                    if target.exists():
-                        return jsonify(error=f"Există deja un fișier cu numele „{target.name}”."), 409
-                    os.replace(staged_path, target)
-                    committed.append(target)
-                    uploaded.append({"name": target.name, "size": target.stat().st_size})
-        except OSError:
-            for target in committed:
-                target.unlink(missing_ok=True)
-            log.exception("Could not save gallery uploads in %s", folder)
-            return jsonify(error="Nu am putut salva fișierele încărcate."), 500
-        finally:
-            for staged_path, _target in staged:
-                staged_path.unlink(missing_ok=True)
-
-        return jsonify(ok=True, uploaded=uploaded), 201
-
     def customer_access_error(slug):
         if _album_expired(album_for(slug)):
             return jsonify(error="Galeria a expirat. Contactați administratorul pentru acces."), 410
@@ -482,10 +409,7 @@ def create_app(
                 "expired": _album_expired(album),
                 "pin_recoverable": isinstance(album.get("pin_encrypted"), str),
                 "cover_options": album_cover_options(slug),
-                "links": [
-                    {"id": link["id"], "allow_upload": link["allow_upload"]}
-                    for link in _album_links(album)
-                ],
+                "links": [{"id": link["id"]} for link in _album_links(album)],
             }
             for slug, album in read_albums().items()
             if isinstance(album, dict)
@@ -600,9 +524,6 @@ def create_app(
     @require_admin
     def admin_create_album_link(slug):
         album_for(slug)
-        body = request.get_json(silent=True)
-        if not isinstance(body, dict) or not isinstance(body.get("allow_upload"), bool):
-            return jsonify(error="Selectați dacă acest link permite încărcarea."), 400
         with admin_write_lock:
             albums = read_albums()
             album = albums.get(slug)
@@ -611,34 +532,10 @@ def create_app(
             links = album.setdefault("links", [])
             if not isinstance(links, list):
                 return jsonify(error="Lista linkurilor galeriei nu este validă."), 500
-            link = {"id": secrets.token_urlsafe(24), "allow_upload": body["allow_upload"]}
+            link = {"id": secrets.token_urlsafe(24)}
             links.append(link)
             _atomic_json(data_dir / "albums.json", albums)
         return jsonify(ok=True, link=link)
-
-    @app.put("/api/admin/albums/<slug>/links/<link_id>")
-    @require_admin
-    def admin_update_album_link(slug, link_id):
-        body = request.get_json(silent=True)
-        if not isinstance(body, dict) or not isinstance(body.get("allow_upload"), bool):
-            return jsonify(error="Selectați dacă acest link permite încărcarea."), 400
-        with admin_write_lock:
-            albums = read_albums()
-            album = albums.get(slug)
-            if not _valid_slug(slug) or not isinstance(album, dict):
-                abort(404)
-            links = album.get("links", [])
-            if not isinstance(links, list):
-                return jsonify(error="Lista linkurilor galeriei nu este validă."), 500
-            link = next(
-                (entry for entry in links if isinstance(entry, dict) and entry.get("id") == link_id),
-                None,
-            )
-            if link is None:
-                abort(404)
-            link["allow_upload"] = body["allow_upload"]
-            _atomic_json(data_dir / "albums.json", albums)
-        return jsonify(ok=True)
 
     @app.delete("/api/admin/albums/<slug>/links/<link_id>")
     @require_admin
@@ -938,12 +835,6 @@ def create_app(
         log.info("Deleted album %s through admin page", slug)
         return jsonify(ok=True)
 
-    @app.post("/api/admin/albums/<slug>/upload")
-    @require_admin
-    def admin_upload_to_album(slug):
-        album = album_for(slug)
-        return save_gallery_uploads(album_source_dir(album))
-
     @app.get("/g/<slug>")
     def gallery(slug):
         album_for(slug)
@@ -1056,18 +947,9 @@ def create_app(
                 if cover_item
                 else None
             ),
-            upload_enabled=request_link_allows_upload(album),
         )
         response.headers["Cache-Control"] = "no-store"
         return response
-
-    @app.post("/api/<slug>/upload")
-    @require_auth
-    def upload_to_gallery(slug):
-        album = album_for(slug)
-        if not request_link_allows_upload(album):
-            return jsonify(error="Acest link nu permite încărcarea fișierelor."), 403
-        return save_gallery_uploads(album_source_dir(album))
 
     @app.post("/api/<slug>/fav")
     @require_auth
@@ -1289,7 +1171,7 @@ def create_app(
 
     @app.errorhandler(413)
     def request_too_large(_error):
-        if request.endpoint not in ("admin_drive_upload", "admin_upload_to_album", "upload_to_gallery"):
+        if request.endpoint != "admin_drive_upload":
             return jsonify(error="Cererea este prea mare."), 413
         limit_gb = drive_max_upload_bytes / (1024**3)
         return jsonify(error=f"Încărcarea depășește limita configurată de {limit_gb:g} GB."), 413

@@ -498,9 +498,7 @@ button { color: inherit; }
 .album-links { flex: 1 1 100%; min-width: 0; padding: 12px; border: 1px solid var(--line); background: var(--surface); }
 .album-links h4 { margin: 0; font-size: .73rem; }
 .album-links > p { margin: 4px 0 10px; color: var(--muted); font-size: .65rem; }
-.album-link-create, .album-link-row { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
-.album-link-create { margin-bottom: 8px; }
-.album-link-create label, .album-link-row label { display: inline-flex; align-items: center; gap: 5px; color: var(--soft); font-size: .66rem; }
+.album-link-row { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
 .album-link-row { padding: 8px 0; border-top: 1px solid var(--line); }
 .album-link-row a { min-width: 0; flex: 1 1 260px; overflow-wrap: anywhere; color: var(--soft); font-size: .66rem; }
 .album-link-row a:hover { color: var(--text); }
@@ -508,8 +506,6 @@ button { color: inherit; }
 .worker-status { margin: 0 0 22px; padding: 15px 17px; border: 1px solid var(--line-strong); background: var(--surface); }
 .worker-status .eyebrow { margin: 0 0 7px; font-size: .57rem; }
 .worker-status > p:not(.eyebrow) { margin: 4px 0 0; color: var(--soft); font-size: .75rem; line-height: 1.5; overflow-wrap: anywhere; }
-.worker-status-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 10px; }
-.worker-status-actions .field-help { margin: 0; }
 .worker-status-error { border-color: #b66b6b; }
 .worker-status-error #workerStatusSummary, .worker-status-error #workerStatusError { color: #e79b9b; }
 .create-panel > .eyebrow { margin-bottom: 10px; color: var(--muted); font-size: .59rem; }

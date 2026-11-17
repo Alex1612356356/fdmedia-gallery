@@ -311,19 +311,18 @@ created before this feature have only a one-way hash, so their existing PINs
 remain valid but cannot be revealed without changing the PIN. Running the
 command again for the same slug resets that album's title/PIN.
 
-You can also create galleries and upload media from the web app. Open
+You can also create galleries from the web app. Open
 `https://YOUR_HOST/admin`, sign in, create a gallery, and leave the optional
 folder selector on its automatic option to have the app create
 `/media/<gallery-slug>` automatically. You can also select an existing folder
-from `/media` to use its photos for the gallery.
-Open the gallery, enter its PIN, and drag files into the upload area. The worker
-will process supported images, RAW files, and videos before they appear. Visitors
-can select photo resolution (640, 1280, or 2560 px) and video resolution (360p,
-720p, or 1080p). Choices are saved in that browser on that device; the gallery
-does not inspect network speed or change resolution automatically.
-The album's **Linkuri suplimentare** controls create separate links; each link
-can allow or block uploads independently, and visitors still need the gallery
-PIN. You can change a link's upload permission or revoke it from the admin page.
+from `/media` to use its photos for the gallery. Add media directly to the
+selected folder using your normal file-sharing method; the worker scans the
+folder every 30 seconds and processes supported images, RAW files, and videos.
+Visitors can select photo resolution (640, 1280, or 2560 px) and video
+resolution (360p, 720p, or 1080p). Choices are saved in that browser on that
+device; the gallery does not inspect network speed or change resolution
+automatically. The album's **Linkuri suplimentare** controls create view-only
+links; visitors still need the gallery PIN.
 
 For private file storage, open `https://YOUR_HOST/drive` and sign in with the
 same administrator password. FD Drive supports folders, multiple file uploads
@@ -368,10 +367,10 @@ public/internet-facing deployment.
 - Test a favorite, a full-size preview, a video if present, and an original download.
 - Download the gallery ZIP and verify it contains the original media files.
 - Sign in as administrator and confirm a photo deletion removes the original file.
-- Create a gallery without specifying a folder, upload a supported photo, and
-  verify the worker adds it to the gallery.
-- Create one view-only link and one upload-enabled link; verify both require the
-  gallery PIN and only the enabled link can upload.
+- Create a gallery with a folder, add a supported photo directly to that folder,
+  and verify the worker adds it to the gallery.
+- Create a supplementary view-only link and verify it still requires the gallery
+  PIN.
 - Open `/drive`, create a folder, upload a file, and verify it can be downloaded.
 - In TrueNAS, check both service logs and confirm the worker reports processed
   files without permission or codec errors.

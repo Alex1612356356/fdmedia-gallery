@@ -25,15 +25,13 @@ async function refreshWorkerStatus() {
   const summary = $('#workerStatusSummary');
   const details = $('#workerStatusDetails');
   const errorMessage = $('#workerStatusError');
-  const scanButton = $('#manualScanButton');
   try {
     const response = await api('status');
     if (!response.ok) throw new Error('Nu am putut citi starea workerului.');
     const status = await response.json();
-    const scanning = status.state === 'scanning' || status.state === 'processing';
     if (!status.alive) {
       summary.textContent = 'Workerul nu a raportat recent. Verifică serviciul worker în TrueNAS.';
-    } else if (scanning) {
+    } else if (status.state === 'processing') {
       summary.textContent = `Procesează ${status.current_album || 'galeria'}${status.current_file ? ` · ${status.current_file}` : ''}`;
     } else if (status.state === 'error') {
       summary.textContent = 'Workerul a întâmpinat o eroare.';
@@ -45,17 +43,12 @@ async function refreshWorkerStatus() {
       : '';
     details.textContent = `Ultima scanare completă: ${displayDate(status.last_scan)}${progress}`;
     errorMessage.textContent = status.last_error ? `Ultima eroare: ${status.last_error}` : '';
-    scanButton.disabled = !status.alive || scanning || status.scan_requested;
-    scanButton.textContent = status.scan_requested
-      ? 'Scanare programată'
-      : scanning ? 'Scanare în curs...' : 'Scanează acum';
     $('#workerStatus').classList.toggle('worker-status-error', !status.alive || status.state === 'error');
   } catch (error) {
     summary.textContent = error instanceof TypeError
       ? 'Nu ne-am putut conecta pentru a verifica workerul.'
       : error.message;
     details.textContent = '';
-    scanButton.disabled = true;
     $('#workerStatus').classList.add('worker-status-error');
   }
 }
@@ -217,25 +210,18 @@ async function refreshAlbums() {
     const linksHeading = document.createElement('h4');
     linksHeading.textContent = 'Linkuri suplimentare';
     const linksHelp = document.createElement('p');
-    linksHelp.textContent = 'Toate linkurile cer PIN-ul galeriei. Alege separat dacă fiecare permite încărcarea.';
+    linksHelp.textContent = 'Toate linkurile suplimentare cer PIN-ul galeriei. Revocă un link pentru a-i opri accesul.';
     const linksList = document.createElement('div');
     linksList.className = 'album-links-list';
-    const createLinkRow = document.createElement('div');
-    createLinkRow.className = 'album-link-create';
-    const createUploadLabel = document.createElement('label');
-    const createUpload = document.createElement('input');
-    createUpload.type = 'checkbox';
-    createUploadLabel.append(createUpload, document.createTextNode(' Permite upload'));
     const createLink = document.createElement('button');
     createLink.className = 'album-theme-save';
     createLink.type = 'button';
-    createLink.textContent = 'Creează link';
+    createLink.textContent = 'Creează link privat';
     createLink.addEventListener('click', async () => {
       createLink.disabled = true;
       try {
         const response = await api(`albums/${encodeURIComponent(album.slug)}/links`, {
           method: 'POST',
-          body: JSON.stringify({ allow_upload: createUpload.checked }),
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Nu am putut crea linkul.');
@@ -246,7 +232,6 @@ async function refreshAlbums() {
         createLink.disabled = false;
       }
     });
-    createLinkRow.append(createUploadLabel, createLink);
     (album.links || []).forEach((shareLink, index) => {
       const row = document.createElement('div');
       row.className = 'album-link-row';
@@ -256,31 +241,6 @@ async function refreshAlbums() {
       anchor.target = '_blank';
       anchor.rel = 'noopener noreferrer';
       anchor.title = `Link ${index + 1}`;
-      const uploadLabel = document.createElement('label');
-      const uploadToggle = document.createElement('input');
-      uploadToggle.type = 'checkbox';
-      uploadToggle.checked = shareLink.allow_upload;
-      uploadLabel.append(uploadToggle, document.createTextNode(' Upload'));
-      const saveLink = document.createElement('button');
-      saveLink.className = 'album-theme-save';
-      saveLink.type = 'button';
-      saveLink.textContent = 'Salvează';
-      saveLink.addEventListener('click', async () => {
-        saveLink.disabled = true;
-        try {
-          const response = await api(`albums/${encodeURIComponent(album.slug)}/links/${encodeURIComponent(shareLink.id)}`, {
-            method: 'PUT',
-            body: JSON.stringify({ allow_upload: uploadToggle.checked }),
-          });
-          const result = await response.json();
-          if (!response.ok) throw new Error(result.error || 'Nu am putut actualiza linkul.');
-          await refreshAlbums();
-        } catch (error) {
-          window.alert(error instanceof TypeError ? 'Nu ne-am putut conecta la server.' : error.message);
-        } finally {
-          saveLink.disabled = false;
-        }
-      });
       const removeLink = document.createElement('button');
       removeLink.className = 'album-delete';
       removeLink.type = 'button';
@@ -300,10 +260,10 @@ async function refreshAlbums() {
           removeLink.disabled = false;
         }
       });
-      row.append(anchor, uploadLabel, saveLink, removeLink);
+      row.append(anchor, removeLink);
       linksList.append(row);
     });
-    linksPanel.append(linksHeading, linksHelp, createLinkRow, linksList);
+    linksPanel.append(linksHeading, linksHelp, createLink, linksList);
     const remove = document.createElement('button');
     remove.className = 'album-delete';
     remove.type = 'button';
@@ -448,21 +408,3 @@ loadAdmin();
 window.setInterval(() => {
   if (!dashboard.hidden) refreshWorkerStatus();
 }, 15000);
-
-$('#manualScanButton').addEventListener('click', async () => {
-  const button = $('#manualScanButton');
-  const message = $('#manualScanMessage');
-  button.disabled = true;
-  message.textContent = '';
-  try {
-    const response = await api('scan', { method: 'POST' });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Nu am putut programa scanarea.');
-    message.textContent = 'Scanarea a fost programată.';
-  } catch (error) {
-    message.textContent = error instanceof TypeError
-      ? 'Nu ne-am putut conecta la server.'
-      : error.message;
-  }
-  await refreshWorkerStatus();
-});
