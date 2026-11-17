@@ -64,8 +64,12 @@ class GalleryAppTests(unittest.TestCase):
         self.assertEqual(response.mimetype, "image/png")
         self.assertEqual(response.headers["Cache-Control"], "private, no-store")
         response.close()
+        webp = self.cache / "event-one" / "t" / "photo one.jpg.webp"
+        webp.write_bytes(b"webp thumbnail")
         response = self.client.get("/m/event-one/t/photo%20one.jpg?v=123-2")
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, b"webp thumbnail")
+        self.assertEqual(response.mimetype, "image/webp")
         self.assertEqual(
             response.headers["Cache-Control"], "private, max-age=31536000, immutable"
         )
@@ -83,7 +87,7 @@ class GalleryAppTests(unittest.TestCase):
         index_path.write_text(json.dumps(index), encoding="utf-8")
         for directory in ("t", "m", "l", "v360", "v", "v1080"):
             path = self.cache / "event-one" / directory / (
-                "clip.mp4.mp4" if directory.startswith("v") else "photo one.jpg.png"
+                "clip.mp4.mp4" if directory.startswith("v") else "photo one.jpg.webp"
             )
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(directory.encode("ascii"))
@@ -120,7 +124,7 @@ class GalleryAppTests(unittest.TestCase):
         self.assertEqual(response.headers["Cache-Control"], "private, no-store")
         response.close()
 
-    def test_photo_uses_legacy_webp_or_an_available_png_rendition(self):
+    def test_photo_prefers_webp_and_falls_back_to_png_rendition(self):
         index_path = self.cache / "event-one" / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8"))
         index["items"].extend(
@@ -131,19 +135,22 @@ class GalleryAppTests(unittest.TestCase):
             ]
         )
         index_path.write_text(json.dumps(index), encoding="utf-8")
-        legacy = self.cache / "event-one" / "l" / "legacy.jpg.webp"
-        legacy.write_bytes(b"legacy-webp")
+        webp = self.cache / "event-one" / "l" / "legacy.jpg.webp"
+        webp.write_bytes(b"current-webp")
         fallback = self.cache / "event-one" / "t" / "new.jpg.png"
         fallback.parent.mkdir(parents=True, exist_ok=True)
         fallback.write_bytes(b"thumbnail-png")
 
         self.client.post("/api/event-one/login", json={"pin": "12345678"})
-        legacy_response = self.client.get("/m/event-one/l/legacy.jpg?v=123-2")
-        self.assertEqual(legacy_response.status_code, 200)
-        self.assertEqual(legacy_response.data, b"legacy-webp")
-        self.assertEqual(legacy_response.mimetype, "image/webp")
-        self.assertEqual(legacy_response.headers["Cache-Control"], "private, no-store")
-        legacy_response.close()
+        webp_response = self.client.get("/m/event-one/l/legacy.jpg?v=123-2")
+        self.assertEqual(webp_response.status_code, 200)
+        self.assertEqual(webp_response.data, b"current-webp")
+        self.assertEqual(webp_response.mimetype, "image/webp")
+        self.assertEqual(
+            webp_response.headers["Cache-Control"],
+            "private, max-age=31536000, immutable",
+        )
+        webp_response.close()
 
         fallback_response = self.client.get("/m/event-one/l/new.jpg?v=123-3")
         self.assertEqual(fallback_response.status_code, 200)

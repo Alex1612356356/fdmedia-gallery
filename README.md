@@ -392,5 +392,6 @@ for missing cached files and regenerates them.
 The worker handles common JPEG/PNG/WebP/TIFF/HEIC/AVIF images, several RAW
 formats with embedded JPEG previews, and MP4/MOV/MKV/M4V/AVI video using
 ExifTool and ffmpeg. RAW files without an embedded JPEG preview are skipped.
+Photo renditions are stored as lossless WebP with an sRGB color profile.
 Initial video conversion and large libraries can use substantial CPU, storage,
 and time.

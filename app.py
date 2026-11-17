@@ -1210,7 +1210,7 @@ def create_app(
                 "v360": "v360",
                 "v1080": "v1080",
             }[kind]
-            suffix = ".mp4" if kind.startswith("v") else ".png"
+            suffix = ".mp4" if kind.startswith("v") else ".webp"
             used_fallback = False
             rendition_dirs = (subdir,)
             extensions = (suffix,)
@@ -1227,7 +1227,7 @@ def create_app(
                     "l": ("m", "t"),
                     "p": ("m", "t"),
                 }[kind]
-                extensions = (".png", ".webp")
+                extensions = (".webp", ".png")
 
             file_path = None
             for rendition_dir in rendition_dirs:
