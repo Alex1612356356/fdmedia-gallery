@@ -64,12 +64,8 @@ class GalleryAppTests(unittest.TestCase):
         self.assertEqual(response.mimetype, "image/png")
         self.assertEqual(response.headers["Cache-Control"], "private, no-store")
         response.close()
-        webp = self.cache / "event-one" / "t" / "photo one.jpg.webp"
-        webp.write_bytes(b"webp thumbnail")
         response = self.client.get("/m/event-one/t/photo%20one.jpg?v=123-2")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data, b"webp thumbnail")
-        self.assertEqual(response.mimetype, "image/webp")
         self.assertEqual(
             response.headers["Cache-Control"], "private, max-age=31536000, immutable"
         )
@@ -80,6 +76,77 @@ class GalleryAppTests(unittest.TestCase):
         self.assertIn("attachment", response.headers["Content-Disposition"])
         response.close()
 
+    def test_recipient_can_create_and_revoke_a_public_album_with_only_selected_items(self):
+        second_name = "second.jpg"
+        second_source = self.media / "event" / second_name
+        second_source.write_bytes(b"second original")
+        for directory in ("t", "l"):
+            (self.cache / "event-one" / directory / f"{second_name}.png").write_bytes(
+                f"{directory} thumbnail".encode()
+            )
+        index_path = self.cache / "event-one" / "index.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["items"].append(
+            {"n": second_name, "type": "image", "w": 10, "h": 8, "m": 456}
+        )
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+
+        self.assertEqual(
+            self.client.post("/api/event-one/shares", json={"title": "Selecție", "items": ["photo one.jpg"]}).status_code,
+            401,
+        )
+        self.client.post("/api/event-one/login", json={"pin": "12345678"})
+        created = self.client.post(
+            "/api/event-one/shares",
+            json={"title": "Cele mai frumoase momente", "items": ["photo one.jpg"]},
+        )
+        self.assertEqual(created.status_code, 201)
+        token = created.json["share"]["token"]
+        self.assertEqual(len(token), 43)
+        self.assertEqual(
+            [share["token"] for share in self.client.get("/api/event-one/shares").json],
+            [token],
+        )
+
+        public = self.app.test_client()
+        self.assertEqual(public.delete(f"/api/event-one/shares/{token}").status_code, 401)
+        page = public.get(f"/s/{token}")
+        self.assertEqual(page.status_code, 200)
+        page.close()
+        listing = public.get(f"/api/s/{token}/items")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(
+            [item["n"] for item in listing.json["items"]],
+            ["photo one.jpg"],
+        )
+        image = public.get(f"/sm/{token}/t/photo%20one.jpg")
+        self.assertEqual(image.status_code, 200)
+        self.assertEqual(image.data, b"thumb")
+        image.close()
+        self.assertEqual(public.get(f"/sm/{token}/t/second.jpg").status_code, 404)
+
+        archive = public.get(f"/api/s/{token}/download")
+        self.assertEqual(archive.status_code, 200)
+        with zipfile.ZipFile(BytesIO(archive.data)) as downloaded:
+            self.assertEqual(downloaded.namelist(), ["photo one.jpg"])
+        archive.close()
+
+        self.assertEqual(
+            self.client.delete(f"/api/event-one/shares/{token}").status_code,
+            200,
+        )
+        self.assertEqual(public.get(f"/api/s/{token}/items").status_code, 404)
+
+    def test_shared_album_rejects_empty_or_unavailable_selections(self):
+        self.client.post("/api/event-one/login", json={"pin": "12345678"})
+        for names in ([], ["missing.jpg"], ["photo one.jpg", "photo one.jpg"]):
+            with self.subTest(names=names):
+                response = self.client.post(
+                    "/api/event-one/shares",
+                    json={"title": "Selecție", "items": names},
+                )
+                self.assertEqual(response.status_code, 400)
+
     def test_gallery_serves_selectable_photo_and_video_renditions(self):
         index_path = self.cache / "event-one" / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8"))
@@ -87,7 +154,7 @@ class GalleryAppTests(unittest.TestCase):
         index_path.write_text(json.dumps(index), encoding="utf-8")
         for directory in ("t", "m", "l", "v360", "v", "v1080"):
             path = self.cache / "event-one" / directory / (
-                "clip.mp4.mp4" if directory.startswith("v") else "photo one.jpg.webp"
+                "clip.mp4.mp4" if directory.startswith("v") else "photo one.jpg.png"
             )
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(directory.encode("ascii"))
@@ -124,7 +191,7 @@ class GalleryAppTests(unittest.TestCase):
         self.assertEqual(response.headers["Cache-Control"], "private, no-store")
         response.close()
 
-    def test_photo_prefers_webp_and_falls_back_to_png_rendition(self):
+    def test_photo_uses_legacy_webp_or_an_available_png_rendition(self):
         index_path = self.cache / "event-one" / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8"))
         index["items"].extend(
@@ -135,22 +202,19 @@ class GalleryAppTests(unittest.TestCase):
             ]
         )
         index_path.write_text(json.dumps(index), encoding="utf-8")
-        webp = self.cache / "event-one" / "l" / "legacy.jpg.webp"
-        webp.write_bytes(b"current-webp")
+        legacy = self.cache / "event-one" / "l" / "legacy.jpg.webp"
+        legacy.write_bytes(b"legacy-webp")
         fallback = self.cache / "event-one" / "t" / "new.jpg.png"
         fallback.parent.mkdir(parents=True, exist_ok=True)
         fallback.write_bytes(b"thumbnail-png")
 
         self.client.post("/api/event-one/login", json={"pin": "12345678"})
-        webp_response = self.client.get("/m/event-one/l/legacy.jpg?v=123-2")
-        self.assertEqual(webp_response.status_code, 200)
-        self.assertEqual(webp_response.data, b"current-webp")
-        self.assertEqual(webp_response.mimetype, "image/webp")
-        self.assertEqual(
-            webp_response.headers["Cache-Control"],
-            "private, max-age=31536000, immutable",
-        )
-        webp_response.close()
+        legacy_response = self.client.get("/m/event-one/l/legacy.jpg?v=123-2")
+        self.assertEqual(legacy_response.status_code, 200)
+        self.assertEqual(legacy_response.data, b"legacy-webp")
+        self.assertEqual(legacy_response.mimetype, "image/webp")
+        self.assertEqual(legacy_response.headers["Cache-Control"], "private, no-store")
+        legacy_response.close()
 
         fallback_response = self.client.get("/m/event-one/l/new.jpg?v=123-3")
         self.assertEqual(fallback_response.status_code, 200)
@@ -319,6 +383,10 @@ class GalleryAppTests(unittest.TestCase):
             "/api/admin/login",
             json={"password": "admin-password-for-tests-at-least-24"},
         )
+        albums_response = client.get("/api/admin/albums")
+        self.assertEqual(albums_response.headers["Cache-Control"], "private, no-store")
+        album_listing = next(album for album in albums_response.json if album["slug"] == "event-one")
+        self.assertEqual(album_listing["cover_options"], ["photo one.jpg"])
         future = datetime.now(timezone.utc) + timedelta(days=10)
         response = client.put(
             "/api/admin/albums/event-one",
@@ -337,47 +405,6 @@ class GalleryAppTests(unittest.TestCase):
         self.assertEqual(status_response.status_code, 200)
         self.assertTrue(status_response.json["alive"])
         self.assertEqual(status_response.json["total"], 5)
-
-    def test_admin_can_request_manual_scan_only_when_worker_is_idle(self):
-        admin_app = create_app(
-            data_dir=self.data,
-            cache_dir=self.cache,
-            media_dir=self.media,
-            secret="test-secret-that-is-at-least-32-bytes",
-            admin_password="admin-password-for-tests-at-least-24",
-            cookie_secure=False,
-        )
-        client = admin_app.test_client()
-        self.assertEqual(client.post("/api/admin/scan").status_code, 401)
-        client.post(
-            "/api/admin/login",
-            json={"password": "admin-password-for-tests-at-least-24"},
-        )
-
-        request_path = self.data / "manual-scan-request"
-        self.assertEqual(client.post("/api/admin/scan").status_code, 503)
-        status_path = self.data / "worker-status.json"
-        status_path.write_text(
-            json.dumps(
-                {"state": "idle", "heartbeat": datetime.now().timestamp()}
-            ),
-            encoding="utf-8",
-        )
-
-        response = client.post("/api/admin/scan")
-        self.assertEqual(response.status_code, 202)
-        self.assertTrue(request_path.is_file())
-        self.assertTrue(client.get("/api/admin/status").json["scan_requested"])
-        self.assertEqual(client.post("/api/admin/scan").status_code, 409)
-
-        request_path.unlink()
-        status_path.write_text(
-            json.dumps(
-                {"state": "scanning", "heartbeat": datetime.now().timestamp()}
-            ),
-            encoding="utf-8",
-        )
-        self.assertEqual(client.post("/api/admin/scan").status_code, 409)
 
     def test_admin_can_list_nested_media_folders(self):
         (self.media / "event" / "Ceremonie").mkdir()

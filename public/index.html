@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#090909">
 <title>fdmedia.studio — Galerie</title>
 <link rel="stylesheet" href="/vendor/photoswipe.css">
-<link rel="stylesheet" href="/static/style.css?v=1.1.2">
+<link rel="stylesheet" href="/static/style.css?v=1.2.0">
 </head>
 <body>
 <header class="top">
@@ -45,6 +45,26 @@
       <span class="gallery-hint">Selectați o imagine pentru a o vizualiza</span>
     </div>
     <nav id="sectionFilters" class="section-filters" aria-label="Filtrează după secțiune" hidden></nav>
+    <section id="galleryTools" class="gallery-tools" hidden aria-label="Sortare și partajare album">
+      <label class="gallery-sort" for="sortOrder">
+        <span>Ordonează după</span>
+        <select id="sortOrder">
+          <option value="date-desc">Dată (mai noi primele)</option>
+          <option value="date-asc">Dată (mai vechi primele)</option>
+          <option value="name-asc">Nume (A–Z)</option>
+          <option value="name-desc">Nume (Z–A)</option>
+        </select>
+      </label>
+      <div class="share-album-form">
+        <label class="visually-hidden" for="shareAlbumTitle">Numele albumului nou</label>
+        <input id="shareAlbumTitle" maxlength="120" placeholder="Numele albumului pentru prieteni">
+        <span id="shareSelectionCount" class="share-selection-count">0 selectate</span>
+        <button id="createShareAlbum" class="action-btn" type="button" disabled>Creează album de partajat</button>
+      </div>
+      <p class="gallery-tool-help">Linkul nu cere PIN; trimite-l doar prietenilor cărora vrei să le dai acces.</p>
+      <p id="shareAlbumMessage" class="gallery-notice" role="status" aria-live="polite"></p>
+      <div id="sharedAlbumList" class="shared-album-list" aria-live="polite"></div>
+    </section>
     <p id="galleryNotice" class="gallery-notice" role="status" aria-live="polite"></p>
     <div id="grid" class="grid"></div>
     <div id="emptyState" class="empty-state" hidden>
@@ -82,6 +102,6 @@
     <p class="gate-footer">CAPTURĂM EMOȚIA PURĂ <span>·</span> FOTO &amp; VIDEO DE EVENIMENT</p>
   </div>
 </div>
-<script type="module" src="/static/app.js?v=1.4.4"></script>
+<script type="module" src="/static/app.js?v=1.5.0"></script>
 </body>
 </html>

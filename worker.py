@@ -3,10 +3,10 @@ import io
 import logging
 import os
 import re
-import struct
 import subprocess
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from PIL import Image, ImageCms, ImageOps
@@ -28,85 +28,10 @@ STATUS_LOCK = threading.Lock()
 IMAGE_EXTENSIONS = re.compile(r"\.(jpe?g|png|webp|tiff?|heic|avif)$", re.IGNORECASE)
 RAW_EXTENSIONS = re.compile(r"\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$", re.IGNORECASE)
 VIDEO_EXTENSIONS = re.compile(r"\.(mp4|mov|mkv|m4v|avi)$", re.IGNORECASE)
-PHOTO_CACHE_VERSION = 6
+PHOTO_CACHE_VERSION = 3
 VIDEO_CACHE_VERSION = 6
-MANUAL_SCAN_REQUEST = "manual-scan-request"
 SRGB_PROFILE = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
-
-
-def create_adobe_rgb_profile():
-    def fixed(value):
-        return struct.pack(">i", round(value * 65536))
-
-    def xyz(values):
-        return b"XYZ " + bytes(4) + b"".join(fixed(value) for value in values)
-
-    def curve():
-        return b"curv" + bytes(4) + struct.pack(">I", 1) + struct.pack(">H", round(2.2 * 256))
-
-    def text_tag(kind, value):
-        encoded = value.encode("ascii") + b"\0"
-        return kind + bytes(4) + encoded
-
-    def description(value):
-        encoded = value.encode("ascii") + b"\0"
-        return (
-            b"desc"
-            + bytes(4)
-            + struct.pack(">I", len(encoded))
-            + encoded
-            + bytes(4 + 4 + 2 + 1 + 67)
-        )
-
-    # Adobe RGB (1998) RGB-to-XYZ D50 matrix, with gamma 2.2 curves.
-    matrix = (
-        (0.6097559, 0.2052401, 0.1492240),
-        (0.3111242, 0.6256560, 0.0632197),
-        (0.0194811, 0.0608902, 0.7448387),
-    )
-    tags = {
-        "desc": description("Adobe RGB (1998)"),
-        "cprt": text_tag(
-            b"text", "Generated from published Adobe RGB (1998) color-space values."
-        ),
-        "wtpt": xyz((0.9642, 1.0, 0.8249)),
-        "rXYZ": xyz(tuple(row[0] for row in matrix)),
-        "gXYZ": xyz(tuple(row[1] for row in matrix)),
-        "bXYZ": xyz(tuple(row[2] for row in matrix)),
-        "rTRC": curve(),
-        "gTRC": curve(),
-        "bTRC": curve(),
-    }
-
-    header = bytearray(128)
-    struct.pack_into(">I", header, 8, 0x02100000)
-    header[12:16] = b"mntr"
-    header[16:20] = b"RGB "
-    header[20:24] = b"XYZ "
-    struct.pack_into(">6H", header, 24, *time.gmtime()[:6])
-    header[36:40] = b"acsp"
-    header[40:44] = b"MSFT"
-    header[48:52] = b"FDMG"
-    header[68:80] = b"".join(fixed(value) for value in (0.9642, 1.0, 0.8249))
-    header[80:84] = b"FDMG"
-
-    entries = bytearray(struct.pack(">I", len(tags)))
-    payload = bytearray()
-    payload_offset = 128 + 4 + 12 * len(tags)
-    for signature, data in sorted(tags.items()):
-        while (payload_offset + len(payload)) % 4:
-            payload.append(0)
-        offset = payload_offset + len(payload)
-        entries.extend(signature.encode("ascii") + struct.pack(">II", offset, len(data)))
-        payload.extend(data)
-
-    profile_data = header + entries + payload
-    struct.pack_into(">I", profile_data, 0, len(profile_data))
-    return ImageCms.ImageCmsProfile(io.BytesIO(profile_data))
-
-
-ADOBE_RGB_PROFILE = create_adobe_rgb_profile()
-ADOBE_RGB_PROFILE_DATA = ADOBE_RGB_PROFILE.tobytes()
+SRGB_PROFILE_DATA = SRGB_PROFILE.tobytes()
 
 
 class AlbumRemoved(Exception):
@@ -155,6 +80,25 @@ def detect_kind(name):
     if VIDEO_EXTENSIONS.search(name):
         return "video"
     return None
+
+
+def capture_timestamp(source):
+    try:
+        with Image.open(source) as image:
+            exif = image.getexif()
+            exif_ifd = exif.get_ifd(0x8769)
+            value = (
+                exif_ifd.get(36867)
+                or exif.get(36867)
+                or exif_ifd.get(36868)
+                or exif.get(306)
+            )
+            if not isinstance(value, str):
+                return None
+            captured = datetime.strptime(value.strip(), "%Y:%m:%d %H:%M:%S")
+            return int(captured.replace(tzinfo=timezone.utc).timestamp() * 1000)
+    except (OSError, KeyError, ValueError):
+        return None
 
 
 def album_is_registered(slug):
@@ -231,49 +175,31 @@ def run_ffmpeg(args, slug=None):
         )
 
 
-def make_webp(image_source, target, width):
+def make_png(image_source, target, width):
     target.parent.mkdir(parents=True, exist_ok=True)
     source = io.BytesIO(image_source) if isinstance(image_source, bytes) else image_source
     with Image.open(source) as opened:
         source_profile_data = opened.info.get("icc_profile")
         image = ImageOps.exif_transpose(opened)
-        output_profile_data = ADOBE_RGB_PROFILE_DATA
         if source_profile_data:
             source_profile = ImageCms.ImageCmsProfile(io.BytesIO(source_profile_data))
-            if (
-                image.mode == "RGB"
-                and source_profile.profile.xcolor_space == "RGB "
-                and ImageCms.getProfileDescription(source_profile).strip()
-                == "Adobe RGB (1998)"
-            ):
-                output_profile_data = source_profile_data
-            else:
-                image = ImageCms.profileToProfile(
-                    image, source_profile, ADOBE_RGB_PROFILE, outputMode="RGB"
-                )
+            image = ImageCms.profileToProfile(
+                image, source_profile, SRGB_PROFILE, outputMode="RGB"
+            )
         else:
             image = image.convert("RGB")
-            image = ImageCms.profileToProfile(
-                image, SRGB_PROFILE, ADOBE_RGB_PROFILE, outputMode="RGB"
-            )
         image.thumbnail((width, width), Image.Resampling.LANCZOS)
         dimensions = image.size
-        image.save(
-            target,
-            "WEBP",
-            lossless=True,
-            method=6,
-            icc_profile=output_profile_data,
-        )
+        image.save(target, "PNG", icc_profile=SRGB_PROFILE_DATA)
     return dimensions
 
 
 def process_media(source, slug, name, kind):
     root = CACHE / slug
     relative_name = Path(*Path(name).parts)
-    thumbnail = root / "t" / relative_name.with_name(f"{relative_name.name}.webp")
-    medium = root / "m" / relative_name.with_name(f"{relative_name.name}.webp")
-    large = root / "l" / relative_name.with_name(f"{relative_name.name}.webp")
+    thumbnail = root / "t" / relative_name.with_name(f"{relative_name.name}.png")
+    medium = root / "m" / relative_name.with_name(f"{relative_name.name}.png")
+    large = root / "l" / relative_name.with_name(f"{relative_name.name}.png")
     if kind == "video":
         poster = root / "tmp" / relative_name.with_name(f"{relative_name.name}.jpg")
         poster.parent.mkdir(parents=True, exist_ok=True)
@@ -335,11 +261,11 @@ def process_media(source, slug, name, kind):
     else:
         image_source = source
 
-    large_width, large_height = make_webp(image_source, large, 2560)
-    make_webp(image_source, medium, 1280)
-    make_webp(image_source, thumbnail, 640)
+    large_width, large_height = make_png(image_source, large, 2560)
+    make_png(image_source, medium, 1280)
+    make_png(image_source, thumbnail, 640)
     for directory in ("t", "m", "l"):
-        legacy = root / directory / relative_name.with_name(f"{relative_name.name}.png")
+        legacy = root / directory / relative_name.with_name(f"{relative_name.name}.webp")
         legacy.unlink(missing_ok=True)
     return {"w": large_width, "h": large_height}
 
@@ -347,9 +273,9 @@ def process_media(source, slug, name, kind):
 def cache_is_complete(root, name, kind):
     relative_name = Path(*Path(name).parts)
     expected = [
-        root / "t" / relative_name.with_name(f"{relative_name.name}.webp"),
-        root / "m" / relative_name.with_name(f"{relative_name.name}.webp"),
-        root / "l" / relative_name.with_name(f"{relative_name.name}.webp"),
+        root / "t" / relative_name.with_name(f"{relative_name.name}.png"),
+        root / "m" / relative_name.with_name(f"{relative_name.name}.png"),
+        root / "l" / relative_name.with_name(f"{relative_name.name}.png"),
     ]
     if kind == "video":
         expected.append(root / "v" / relative_name.with_name(f"{relative_name.name}.mp4"))
@@ -384,13 +310,7 @@ def scan_album(slug, album):
         (source for source in source_dir.rglob("*") if source.is_file()),
         key=lambda entry: entry.relative_to(source_dir).as_posix().casefold(),
     )
-    media_sources = sorted(
-        (source for source in sources if detect_kind(source.name)),
-        key=lambda source: (
-            detect_kind(source.name) == "video",
-            source.relative_to(source_dir).as_posix().casefold(),
-        ),
-    )
+    media_sources = [source for source in sources if detect_kind(source.name)]
     update_worker_status(
         state="processing",
         current_album=slug,
@@ -424,6 +344,11 @@ def scan_album(slug, album):
                     )
                 )
             )
+            date = prior.get("date") if same_source else None
+            if not isinstance(date, int):
+                date = capture_timestamp(source) if kind != "video" else None
+            if date is None:
+                date = stat.st_mtime_ns // 1_000_000
             if same_source and cache_is_complete(root, name, kind):
                 dimensions = {"w": prior.get("w"), "h": prior.get("h")}
             else:
@@ -441,6 +366,7 @@ def scan_album(slug, album):
                 "w": dimensions["w"],
                 "h": dimensions["h"],
                 "m": stat.st_mtime_ns,
+                "date": date,
                 "size": stat.st_size,
             }
             if kind == "video":
@@ -524,19 +450,6 @@ def scan_once():
     )
 
 
-def wait_for_manual_scan_request():
-    deadline = time.monotonic() + INTERVAL
-    request_path = DATA / MANUAL_SCAN_REQUEST
-    while time.monotonic() < deadline:
-        if request_path.is_file():
-            return
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return
-        time.sleep(min(1, remaining))
-
-
-
 def main():
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
     heartbeat_stop = threading.Event()
@@ -550,20 +463,12 @@ def main():
 
     threading.Thread(target=heartbeat, name="worker-heartbeat", daemon=True).start()
     while True:
-        request_path = DATA / MANUAL_SCAN_REQUEST
-        manual_request = request_path.is_file()
         try:
             scan_once()
         except (OSError, ValueError) as exc:
             LOG.error("scan failed: %s", exc)
             update_worker_status(state="error", last_error=str(exc))
-        finally:
-            if manual_request:
-                try:
-                    request_path.unlink(missing_ok=True)
-                except OSError:
-                    LOG.exception("could not clear manual scan request")
-        wait_for_manual_scan_request()
+        time.sleep(INTERVAL)
 
 
 if __name__ == "__main__":

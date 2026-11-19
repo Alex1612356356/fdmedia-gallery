@@ -54,7 +54,7 @@ async function refreshWorkerStatus() {
 }
 
 async function refreshAlbums() {
-  const response = await api('albums');
+  const response = await api('albums', { cache: 'no-store' });
   if (response.status === 401) {
     loginSection.hidden = false;
     dashboard.hidden = true;
@@ -157,7 +157,14 @@ async function refreshAlbums() {
     noCover.value = '';
     noCover.textContent = 'Fără copertă';
     coverSelect.append(noCover);
-    (album.cover_options || []).forEach(name => {
+    const coverOptions = Array.isArray(album.cover_options) ? album.cover_options : [];
+    if (!coverOptions.length) {
+      const emptyCover = document.createElement('option');
+      emptyCover.disabled = true;
+      emptyCover.textContent = 'Nicio imagine indexată — verifică workerul';
+      coverSelect.append(emptyCover);
+    }
+    coverOptions.forEach(name => {
       const option = document.createElement('option');
       option.value = name;
       option.textContent = name;

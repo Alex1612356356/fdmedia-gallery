@@ -22,6 +22,7 @@ from cli import ALBUM_THEMES, add_album, decrypt_album_pin
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 HEX_64_RE = re.compile(r"^[0-9a-f]{64}$")
+SHARE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")
 log = logging.getLogger("fdmedia-gallery")
 admin_write_lock = threading.Lock()
 DEFAULT_GALLERY_DESCRIPTION = "Am păstrat aici momentele voastre. Bucurați-vă de ele."
@@ -81,16 +82,6 @@ def _album_expired(album):
         log.error("Album has invalid expires_at value: %r", expires_at)
         return True
     return parsed.astimezone(timezone.utc) <= datetime.now(timezone.utc)
-
-
-def _worker_is_alive(status):
-    try:
-        heartbeat = float(status.get("heartbeat"))
-        return time.time() - heartbeat <= max(
-            90, int(os.environ.get("INTERVAL", "30")) * 3
-        )
-    except (AttributeError, TypeError, ValueError):
-        return False
 
 
 def _media_relative_path(name):
@@ -185,6 +176,11 @@ def create_app(
     drive_dir = drive_dir.resolve()
     if not drive_dir.is_relative_to(data_dir):
         raise RuntimeError("The Drive storage folder must be inside DATA.")
+    shared_albums_dir = data_dir / "shared-albums"
+    shared_albums_dir.mkdir(parents=True, exist_ok=True)
+    shared_albums_dir = shared_albums_dir.resolve()
+    if not shared_albums_dir.is_relative_to(data_dir):
+        raise RuntimeError("The shared albums folder must be inside DATA.")
 
     app = Flask(__name__, static_folder=None)
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
@@ -193,6 +189,7 @@ def create_app(
         CACHE_DIR=cache_dir,
         MEDIA_DIR=media_dir,
         DRIVE_DIR=drive_dir,
+        SHARED_ALBUMS_DIR=shared_albums_dir,
         DRIVE_MAX_UPLOAD_BYTES=drive_max_upload_bytes,
         SECRET_KEY=secret,
         COOKIE_SECURE=cookie_secure,
@@ -247,6 +244,34 @@ def create_app(
     def index_for(slug):
         value = _read_json(cache_dir / slug / "index.json", {"items": []})
         return value if isinstance(value, dict) and isinstance(value.get("items"), list) else {"items": []}
+
+    def shared_album_for(token):
+        if not isinstance(token, str) or not SHARE_TOKEN_RE.fullmatch(token):
+            abort(404)
+        share = _read_json(shared_albums_dir / f"{token}.json", None)
+        if (
+            not isinstance(share, dict)
+            or not isinstance(share.get("source"), str)
+            or not _valid_slug(share["source"])
+            or not isinstance(share.get("title"), str)
+            or not isinstance(share.get("items"), list)
+        ):
+            abort(404)
+        return share
+
+    def shared_album_items(share):
+        current_items = {
+            item["n"]: item
+            for item in index_for(share["source"])["items"]
+            if isinstance(item, dict)
+            and isinstance(item.get("n"), str)
+            and item.get("type") in ("image", "video")
+        }
+        return [
+            current_items[name]
+            for name in share["items"]
+            if isinstance(name, str) and name in current_items
+        ]
 
     def album_source_dir(album):
         folder = album.get("folder")
@@ -414,7 +439,9 @@ def create_app(
             for slug, album in read_albums().items()
             if isinstance(album, dict)
         ]
-        return jsonify(sorted(result, key=lambda album: album["title"].casefold()))
+        response = jsonify(sorted(result, key=lambda album: album["title"].casefold()))
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
 
     @app.get("/api/admin/media-folders")
     @require_admin
@@ -606,31 +633,14 @@ def create_app(
         status = _read_json(data_dir / "worker-status.json", {})
         if not isinstance(status, dict):
             status = {}
-        status["alive"] = _worker_is_alive(status)
-        status["scan_requested"] = (data_dir / "manual-scan-request").is_file()
-        return jsonify(status)
-
-    @app.post("/api/admin/scan")
-    @require_admin
-    def admin_scan():
-        status = _read_json(data_dir / "worker-status.json", {})
-        if not isinstance(status, dict):
-            status = {}
-        if not _worker_is_alive(status):
-            return jsonify(error="Workerul nu este activ. Verifică serviciul worker."), 503
-        if status.get("state") in ("scanning", "processing"):
-            return jsonify(error="Workerul scanează deja."), 409
-
-        request_path = data_dir / "manual-scan-request"
+        heartbeat = status.get("heartbeat")
         try:
-            with request_path.open("x", encoding="utf-8") as handle:
-                handle.write(f"{time.time()}\n")
-        except FileExistsError:
-            return jsonify(error="O scanare manuală este deja în așteptare."), 409
-        except OSError:
-            log.exception("Could not request a manual media scan")
-            return jsonify(error="Nu am putut programa scanarea."), 500
-        return jsonify(ok=True), 202
+            last_heartbeat = float(heartbeat)
+            alive = time.time() - last_heartbeat <= max(90, int(os.environ.get("INTERVAL", "30")) * 3)
+        except (TypeError, ValueError):
+            alive = False
+        status["alive"] = alive
+        return jsonify(status)
 
     @app.get("/api/admin/drive")
     @require_admin
@@ -842,6 +852,13 @@ def create_app(
         response.headers["Cache-Control"] = "no-store"
         return response
 
+    @app.get("/s/<token>")
+    def shared_gallery(token):
+        shared_album_for(token)
+        response = make_response(send_from_directory(Path(__file__).parent / "public", "index.html"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.get("/static/<path:filename>")
     def static_file(filename):
         return send_from_directory(Path(__file__).parent / "public", filename, max_age=3600)
@@ -948,6 +965,141 @@ def create_app(
                 else None
             ),
         )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.post("/api/<slug>/shares")
+    @require_auth
+    def create_shared_album(slug):
+        request.max_content_length = 1024 * 1024
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify(error="Cerere invalidă."), 400
+        title = body.get("title")
+        names = body.get("items")
+        if not isinstance(title, str) or not title.strip() or len(title.strip()) > 120:
+            return jsonify(error="Numele albumului trebuie să aibă între 1 și 120 de caractere."), 400
+        if (
+            not isinstance(names, list)
+            or not names
+            or len(names) > 1000
+            or any(not isinstance(name, str) for name in names)
+            or len(set(names)) != len(names)
+        ):
+            return jsonify(error="Selectează între 1 și 1000 de fotografii sau videoclipuri."), 400
+
+        album = album_for(slug)
+        indexed = {
+            item["n"]: item
+            for item in index_for(slug)["items"]
+            if isinstance(item, dict)
+            and isinstance(item.get("n"), str)
+            and item.get("type") in ("image", "video")
+        }
+        if any(name not in indexed for name in names):
+            return jsonify(error="Selecția conține fișiere care nu mai sunt în galerie."), 400
+        if any(_media_relative_path(name) is None for name in names):
+            return jsonify(error="Selecția conține o cale de fișier invalidă."), 400
+        for name in names:
+            album_source_file(album, name)
+
+        with admin_write_lock:
+            token = secrets.token_urlsafe(32)
+            share_path = shared_albums_dir / f"{token}.json"
+            while share_path.exists():
+                token = secrets.token_urlsafe(32)
+                share_path = shared_albums_dir / f"{token}.json"
+            _atomic_json(
+                share_path,
+                {
+                    "source": slug,
+                    "title": title.strip(),
+                    "items": names,
+                    "created": int(time.time()),
+                },
+            )
+        return jsonify(ok=True, share={"token": token, "title": title.strip()}), 201
+
+    @app.get("/api/<slug>/shares")
+    @require_auth
+    def list_shared_albums(slug):
+        shares = []
+        for path in shared_albums_dir.glob("*.json"):
+            share = _read_json(path, None)
+            if (
+                isinstance(share, dict)
+                and SHARE_TOKEN_RE.fullmatch(path.stem)
+                and share.get("source") == slug
+                and isinstance(share.get("title"), str)
+                and isinstance(share.get("created"), int)
+            ):
+                shares.append(
+                    {
+                        "token": path.stem,
+                        "title": share["title"],
+                        "created": share["created"],
+                    }
+                )
+        return jsonify(sorted(shares, key=lambda share: share["created"], reverse=True))
+
+    @app.delete("/api/<slug>/shares/<token>")
+    @require_auth
+    def delete_shared_album(slug, token):
+        share = shared_album_for(token)
+        if share["source"] != slug:
+            abort(404)
+        with admin_write_lock:
+            try:
+                (shared_albums_dir / f"{token}.json").unlink()
+            except FileNotFoundError:
+                abort(404)
+        return jsonify(ok=True)
+
+    @app.get("/api/s/<token>/items")
+    def public_shared_album_items(token):
+        share = shared_album_for(token)
+        items = shared_album_items(share)
+        response = jsonify(
+            title=share["title"],
+            description="Un album cu fotografii și videoclipuri selectate.",
+            theme="default",
+            items=items,
+            favs=[],
+            sections=[],
+            cover=None,
+            shared=True,
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get("/api/s/<token>/download")
+    def download_shared_album(token):
+        share = shared_album_for(token)
+        album = album_for(share["source"])
+        items = shared_album_items(share)
+        if not items:
+            return jsonify(error="Albumul nu conține fișiere de descărcat."), 404
+        archive_file = tempfile.SpooledTemporaryFile(max_size=16 * 1024 * 1024, mode="w+b")
+        try:
+            with zipfile.ZipFile(archive_file, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
+                for item in items:
+                    archive.write(
+                        album_source_file(album, item["n"]),
+                        arcname=item["n"],
+                    )
+            archive_file.seek(0)
+        except OSError:
+            archive_file.close()
+            log.exception("Could not create download archive for shared album %s", token)
+            return jsonify(error="Nu am putut crea arhiva albumului."), 500
+        response = send_file(
+            archive_file,
+            mimetype="application/zip",
+            as_attachment=True,
+            download_name="album.zip",
+            conditional=False,
+        )
+        response.call_on_close(archive_file.close)
         response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -1102,6 +1254,9 @@ def create_app(
     @app.get("/m/<slug>/<kind>/<path:name>")
     @require_auth
     def media(slug, kind, name):
+        return serve_media(slug, kind, name)
+
+    def serve_media(slug, kind, name):
         album = album_for(slug)
         item = next((i for i in index_for(slug)["items"] if isinstance(i, dict) and i.get("n") == name), None)
         if item is None:
@@ -1119,7 +1274,7 @@ def create_app(
                 "v360": "v360",
                 "v1080": "v1080",
             }[kind]
-            suffix = ".mp4" if kind.startswith("v") else ".webp"
+            suffix = ".mp4" if kind.startswith("v") else ".png"
             used_fallback = False
             rendition_dirs = (subdir,)
             extensions = (suffix,)
@@ -1136,7 +1291,7 @@ def create_app(
                     "l": ("m", "t"),
                     "p": ("m", "t"),
                 }[kind]
-                extensions = (".webp", ".png")
+                extensions = (".png", ".webp")
 
             file_path = None
             for rendition_dir in rendition_dirs:
@@ -1167,6 +1322,15 @@ def create_app(
             if kind == "o" or used_fallback or not request.args.get("v")
             else "private, max-age=31536000, immutable"
         )
+        return response
+
+    @app.get("/sm/<token>/<kind>/<path:name>")
+    def shared_media(token, kind, name):
+        share = shared_album_for(token)
+        if name not in share["items"]:
+            abort(404)
+        response = serve_media(share["source"], kind, name)
+        response.headers["Cache-Control"] = "no-store"
         return response
 
     @app.errorhandler(413)

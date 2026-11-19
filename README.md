@@ -202,14 +202,10 @@ Use `sudo` if your TrueNAS account needs it to access Docker. Never change the
 Docker socket permissions to work around a permission error.
 
 The web service serves the gallery; the worker checks albums every 30 seconds
-and generates previews for newly uploaded or changed photos. Photos are
-processed before videos so a long video conversion does not delay new photos.
-Processed items are added to the gallery as they finish. Removing an album
-stops its active scan and video conversion. No service restart is needed for
-photo uploads.
-From the admin dashboard, **Manual scan** requests an immediate scan of all
-albums when the worker is idle; the button is unavailable while it is scanning
-or if the worker is offline.
+and generates previews for newly uploaded or changed photos. Processed items
+are added to the gallery as they finish, so large video conversions do not
+block already-processed photos. Removing an album stops its active scan and
+video conversion. No service restart is needed for photo uploads.
 
 If pulling the image fails with a registry DNS timeout, check resolution from
 the TrueNAS shell:
@@ -323,6 +319,11 @@ resolution (360p, 720p, or 1080p). Choices are saved in that browser on that
 device; the gallery does not inspect network speed or change resolution
 automatically. The album's **Linkuri suplimentare** controls create view-only
 links; visitors still need the gallery PIN.
+In a gallery, choose a sort order (capture date when available, otherwise file
+modification date, or filename), select photos/videos, enter a title, and create
+a new share album. Share its private URL with friends; only selected media is
+available there, without a PIN. Existing share albums can be copied or revoked
+from the main gallery.
 
 For private file storage, open `https://YOUR_HOST/drive` and sign in with the
 same administrator password. FD Drive supports folders, multiple file uploads
@@ -395,8 +396,5 @@ for missing cached files and regenerates them.
 The worker handles common JPEG/PNG/WebP/TIFF/HEIC/AVIF images, several RAW
 formats with embedded JPEG previews, and MP4/MOV/MKV/M4V/AVI video using
 ExifTool and ffmpeg. RAW files without an embedded JPEG preview are skipped.
-Photo renditions are stored as lossless WebP with an Adobe RGB (1998) color
-profile. Sources already tagged Adobe RGB keep their original ICC profile and
-pixel values; sources without an embedded profile are treated as sRGB before conversion.
 Initial video conversion and large libraries can use substantial CPU, storage,
 and time.

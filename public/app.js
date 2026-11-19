@@ -1,26 +1,38 @@
 import PhotoSwipeLightbox from '/vendor/photoswipe-lightbox.esm.min.js';
-const slug = location.pathname.split('/')[2];
+const shareToken = location.pathname.startsWith('/s/') ? location.pathname.split('/')[2] : null;
+const isSharedAlbum = Boolean(shareToken);
+const slug = isSharedAlbum ? null : location.pathname.split('/')[2];
 const $ = s => document.querySelector(s), grid = $('#grid');
 let items = [], favs = new Set(), onlyFav = false, isAdmin = false, sections = [], activeSection = 'all';
+let sortOrder = 'date-desc', creatingShare = false;
+const shareSelections = new Set();
 const shareLink = new URLSearchParams(location.search).get('link');
 let imageObserver;
 const PHOTO_RENDITION = 'l';
 const VIDEO_RENDITION = 'v';
 const api = (p, o = {}) => {
-  const endpoint = new URL(`/api/${encodeURIComponent(slug)}/${p}`, location.origin);
+  const endpoint = new URL(
+    isSharedAlbum
+      ? `/api/s/${encodeURIComponent(shareToken)}/${p}`
+      : `/api/${encodeURIComponent(slug)}/${p}`,
+    location.origin,
+  );
   if (shareLink) endpoint.searchParams.set('link', shareLink);
   return fetch(endpoint, { credentials: 'same-origin', cache: 'no-store', ...o });
 };
 const url = (k, n, m, version) => {
   const cacheKey = [m, version].filter(value => value !== undefined && value !== null).join('-');
-  return `/m/${slug}/${k}/${encodeURIComponent(n)}${cacheKey ? `?v=${encodeURIComponent(cacheKey)}` : ''}`;
+  const path = isSharedAlbum
+    ? `/sm/${encodeURIComponent(shareToken)}/${k}/${encodeURIComponent(n)}`
+    : `/m/${slug}/${k}/${encodeURIComponent(n)}`;
+  return `${path}${cacheKey ? `?v=${encodeURIComponent(cacheKey)}` : ''}`;
 };
 const renditionVersion = item => item.type === 'video' ? item.video_version : item.photo_version;
 
 async function load() {
   try {
     const r = await api('items');
-    if (r.status === 401) { $('#gate').hidden = false; $('#pin').focus(); return; }
+    if (r.status === 401 && !isSharedAlbum) { $('#gate').hidden = false; $('#pin').focus(); return; }
     if (r.status === 410) {
       const expired = await r.json();
       throw new Error(expired.error || 'Galeria a expirat.');
@@ -31,21 +43,23 @@ async function load() {
     favs = new Set(Array.isArray(d.favs) ? d.favs : []);
     sections = Array.isArray(d.sections) ? d.sections : [];
     activeSection = 'all';
-    try {
-      const adminResponse = await fetch('/api/admin/session', { credentials: 'same-origin', cache: 'no-store' });
-      if (adminResponse.status === 503) {
-        isAdmin = false;
-      } else if (!adminResponse.ok) {
-        throw new Error('Nu am putut verifica permisiunile administratorului.');
-      } else {
-        const adminState = await adminResponse.json();
-        isAdmin = adminState.authenticated === true;
+    isAdmin = false;
+    if (!isSharedAlbum) {
+      try {
+        const adminResponse = await fetch('/api/admin/session', { credentials: 'same-origin', cache: 'no-store' });
+        if (adminResponse.status !== 503 && !adminResponse.ok) {
+          throw new Error('Nu am putut verifica permisiunile administratorului.');
+        }
+        if (adminResponse.ok) {
+          const adminState = await adminResponse.json();
+          isAdmin = adminState.authenticated === true;
+        }
+      } catch {
+        $('#galleryNotice').textContent = 'Nu am putut verifica permisiunile administratorului; comenzile de administrare sunt ascunse.';
       }
-    } catch {
-      isAdmin = false;
-      $('#galleryNotice').textContent = 'Nu am putut verifica permisiunile administratorului; comenzile de administrare sunt ascunse.';
     }
     $('#gate').hidden = true; $('#hero').hidden = false;
+    $('#galleryTools').hidden = isSharedAlbum;
     $('#title').textContent = d.title || 'Galerie foto';
     $('#description').textContent = d.description || 'Am păstrat aici momentele voastre. Bucurați-vă de ele.';
     $('#hero').dataset.theme = d.theme || 'default';
@@ -62,17 +76,29 @@ async function load() {
       cover.hidden = true;
     }
     document.title = (d.title || 'Galerie foto') + ' — fdmedia.studio';
-    $('#dlAll').href = `/api/${encodeURIComponent(slug)}/download`;
-    $('#dlFavorites').href = `/api/${encodeURIComponent(slug)}/download-favorites`;
+    $('#dlAll').href = isSharedAlbum
+      ? `/api/s/${encodeURIComponent(shareToken)}/download`
+      : `/api/${encodeURIComponent(slug)}/download`;
     $('#dlAll').hidden = false;
-    $('#filterFav').hidden = false;
+    $('#filterFav').hidden = isSharedAlbum;
+    if (!isSharedAlbum) {
+      $('#dlFavorites').href = `/api/${encodeURIComponent(slug)}/download-favorites`;
+      await refreshSharedAlbums();
+    }
     updateFavoriteDownload();
+    updateShareControls();
     render(); initLightbox();
   } catch (error) {
-    $('#gate').hidden = false;
-    $('#err').textContent = error instanceof TypeError
-      ? 'Nu ne-am putut conecta. Verificați conexiunea și încercați din nou.'
-      : error.message;
+    if (isSharedAlbum) {
+      $('#galleryNotice').textContent = error instanceof TypeError
+        ? 'Nu ne-am putut conecta. Verificați conexiunea și încercați din nou.'
+        : error.message;
+    } else {
+      $('#gate').hidden = false;
+      $('#err').textContent = error instanceof TypeError
+        ? 'Nu ne-am putut conecta. Verificați conexiunea și încercați din nou.'
+        : error.message;
+    }
   }
 }
 $('#pinForm').onsubmit = async e => {
@@ -107,13 +133,39 @@ $('#togglePin').onclick = e => {
   input.focus();
 };
 
-const visible = () => items.filter(i =>
-  (!onlyFav || favs.has(i.n)) &&
-  (activeSection === 'all' || (i.section || (i.n.includes('/') ? i.n.split('/')[0] : '__root__')) === activeSection)
-);
+const visible = () => {
+  const list = items.filter(i =>
+    (!onlyFav || favs.has(i.n)) &&
+    (activeSection === 'all' || (i.section || (i.n.includes('/') ? i.n.split('/')[0] : '__root__')) === activeSection)
+  );
+  const compareName = (left, right) => left.n.localeCompare(right.n, 'ro', { numeric: true, sensitivity: 'base' });
+  const date = item => Number(item.date) || (Number(item.m) / 1e6) || 0;
+  list.sort((left, right) => {
+    if (sortOrder === 'name-asc') return compareName(left, right);
+    if (sortOrder === 'name-desc') return compareName(right, left);
+    const difference = date(left) - date(right);
+    return (sortOrder === 'date-asc' ? difference : -difference) || compareName(left, right);
+  });
+  return list;
+};
 function updateFavoriteDownload() {
   $('#favoriteDownloadCount').textContent = favs.size;
-  $('#dlFavorites').hidden = favs.size === 0;
+  $('#dlFavorites').hidden = isSharedAlbum || favs.size === 0;
+}
+function updateShareControls() {
+  if (isSharedAlbum) return;
+  $('#shareSelectionCount').textContent = `${shareSelections.size} selectate`;
+  $('#createShareAlbum').disabled = creatingShare || shareSelections.size === 0;
+}
+function toggleShareSelection(item, button) {
+  if (shareSelections.has(item.n)) shareSelections.delete(item.n);
+  else shareSelections.add(item.n);
+  const selected = shareSelections.has(item.n);
+  button.classList.toggle('share-photo-selected', selected);
+  button.setAttribute('aria-pressed', String(selected));
+  button.setAttribute('aria-label', `${selected ? 'Elimină din selecție' : 'Adaugă la selecție'}: ${item.n}`);
+  button.textContent = selected ? 'Selectată' : 'Selectează';
+  updateShareControls();
 }
 function renderSections() {
   const nav = $('#sectionFilters');
@@ -184,14 +236,29 @@ function render() {
     image.alt = it.type === 'video' ? `Previzualizare videoclip: ${it.n}` : `Fotografie: ${it.n}`;
     image.dataset.src = url('t', it.n, it.m, renditionVersion(it));
     link.append(image);
-    const heart = document.createElement('button');
-    heart.className = `heart ${favs.has(it.n) ? 'on' : ''}`;
-    heart.type = 'button';
-    heart.setAttribute('aria-label', favs.has(it.n) ? 'Elimină de la favorite' : 'Adaugă la favorite');
-    heart.setAttribute('aria-pressed', String(favs.has(it.n)));
-    heart.textContent = '♥';
-    heart.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); toggle(it.n); };
-    card.append(link, heart);
+    card.append(link);
+    if (!isSharedAlbum) {
+      const select = document.createElement('button');
+      select.className = `share-photo-select${shareSelections.has(it.n) ? ' share-photo-selected' : ''}`;
+      select.type = 'button';
+      select.textContent = shareSelections.has(it.n) ? 'Selectată' : 'Selectează';
+      select.setAttribute('aria-pressed', String(shareSelections.has(it.n)));
+      select.setAttribute('aria-label', `${shareSelections.has(it.n) ? 'Elimină din selecție' : 'Adaugă la selecție'}: ${it.n}`);
+      select.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleShareSelection(it, select);
+      });
+      card.append(select);
+      const heart = document.createElement('button');
+      heart.className = `heart ${favs.has(it.n) ? 'on' : ''}`;
+      heart.type = 'button';
+      heart.setAttribute('aria-label', favs.has(it.n) ? 'Elimină de la favorite' : 'Adaugă la favorite');
+      heart.setAttribute('aria-pressed', String(favs.has(it.n)));
+      heart.textContent = '♥';
+      heart.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); toggle(it.n); };
+      card.append(heart);
+    }
     if (isAdmin) {
       const remove = document.createElement('button');
       remove.className = 'photo-delete';
@@ -275,9 +342,11 @@ function initLightbox() {
   });
   const cur = () => visible()[lb.pswp.currIndex];
   lb.on('uiRegister', () => {
-    lb.pswp.ui.registerElement({ name: 'fav', order: 8, isButton: true, html: '♥', title: 'Favorit',
-      onClick: (e, el) => { toggle(cur().n); setTimeout(() => el.classList.toggle('on', favs.has(cur().n))); },
-      onInit: (el, pswp) => pswp.on('change', () => el.classList.toggle('on', favs.has(cur().n))) });
+    if (!isSharedAlbum) {
+      lb.pswp.ui.registerElement({ name: 'fav', order: 8, isButton: true, html: '♥', title: 'Favorit',
+        onClick: (e, el) => { toggle(cur().n); setTimeout(() => el.classList.toggle('on', favs.has(cur().n))); },
+        onInit: (el, pswp) => pswp.on('change', () => el.classList.toggle('on', favs.has(cur().n))) });
+    }
     lb.pswp.ui.registerElement({ name: 'dl', order: 9, isButton: true, html: '⬇', title: 'Descarcă original',
       onClick: () => { const a = document.createElement('a'); a.href = url('o', cur().n, cur().m); a.download = cur().n; a.click(); } });
   });
@@ -290,6 +359,105 @@ function initLightbox() {
   lb.on('close', () => document.querySelectorAll('.pswp__video').forEach(v => v.pause()));
   lb.init();
 }
+async function refreshSharedAlbums() {
+  const list = $('#sharedAlbumList');
+  list.replaceChildren();
+  try {
+    const response = await fetch(`/api/${encodeURIComponent(slug)}/shares`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error('Nu am putut încărca albumele create.');
+    const shares = await response.json();
+    shares.forEach(share => {
+      const row = document.createElement('div');
+      row.className = 'shared-album-row';
+      const link = document.createElement('a');
+      link.href = `/s/${encodeURIComponent(share.token)}`;
+      link.textContent = share.title;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      const copy = document.createElement('button');
+      copy.className = 'share-revoke';
+      copy.type = 'button';
+      copy.textContent = 'Copiază linkul';
+      copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(link.href);
+          $('#shareAlbumMessage').textContent = `Linkul „${share.title}” a fost copiat.`;
+        } catch {
+          $('#shareAlbumMessage').textContent = `Copiază linkul din bara browserului: ${link.href}`;
+        }
+      });
+      const revoke = document.createElement('button');
+      revoke.className = 'share-revoke';
+      revoke.type = 'button';
+      revoke.textContent = 'Revocă';
+      revoke.addEventListener('click', async () => {
+        if (!window.confirm(`Revoci linkul pentru „${share.title}”?`)) return;
+        revoke.disabled = true;
+        try {
+          const result = await fetch(`/api/${encodeURIComponent(slug)}/shares/${encodeURIComponent(share.token)}`, {
+            method: 'DELETE',
+            credentials: 'same-origin',
+          });
+          if (!result.ok) throw new Error('Nu am putut revoca linkul.');
+          await refreshSharedAlbums();
+          $('#shareAlbumMessage').textContent = 'Linkul albumului a fost revocat.';
+        } catch (error) {
+          $('#shareAlbumMessage').textContent = error instanceof TypeError
+            ? 'Nu ne-am putut conecta la server.'
+            : error.message;
+          revoke.disabled = false;
+        }
+      });
+      row.append(link, copy, revoke);
+      list.append(row);
+    });
+  } catch (error) {
+    $('#shareAlbumMessage').textContent = error instanceof TypeError
+      ? 'Nu ne-am putut conecta la server pentru a încărca albumele create.'
+      : error.message;
+  }
+}
+$('#createShareAlbum').addEventListener('click', async () => {
+  const title = $('#shareAlbumTitle').value.trim();
+  if (!title) {
+    $('#shareAlbumMessage').textContent = 'Scrie un nume pentru albumul nou.';
+    $('#shareAlbumTitle').focus();
+    return;
+  }
+  creatingShare = true;
+  updateShareControls();
+  $('#shareAlbumMessage').textContent = 'Se creează albumul...';
+  try {
+    const response = await fetch(`/api/${encodeURIComponent(slug)}/shares`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, items: [...shareSelections] }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Nu am putut crea albumul.');
+    shareSelections.clear();
+    $('#shareAlbumTitle').value = '';
+    $('#shareAlbumMessage').textContent = `Albumul a fost creat: ${location.origin}/s/${result.share.token}`;
+    await refreshSharedAlbums();
+    render();
+  } catch (error) {
+    $('#shareAlbumMessage').textContent = error instanceof TypeError
+      ? 'Nu ne-am putut conecta la server.'
+      : error.message;
+  } finally {
+    creatingShare = false;
+    updateShareControls();
+  }
+});
+$('#sortOrder').addEventListener('change', event => {
+  sortOrder = event.currentTarget.value;
+  render();
+  initLightbox();
+});
 async function refreshGallery() {
   if ($('#gate').hidden === false || document.querySelector('.pswp--open')) return;
   try {
@@ -312,6 +480,10 @@ async function refreshGallery() {
     if (fingerprint(items) === fingerprint(nextItems) && !metadataChanged) return;
     const added = nextItems.filter(item => !items.some(existing => existing.n === item.n)).length;
     items = nextItems;
+    const availableNames = new Set(items.map(item => item.n));
+    shareSelections.forEach(name => {
+      if (!availableNames.has(name)) shareSelections.delete(name);
+    });
     sections = Array.isArray(data.sections) ? data.sections : [];
     document.documentElement.dataset.theme = data.theme || 'default';
     $('#hero').dataset.theme = data.theme || 'default';
@@ -324,6 +496,7 @@ async function refreshGallery() {
       $('#heroCover').hidden = true;
     }
     render();
+    updateShareControls();
     initLightbox();
     $('#galleryNotice').textContent = added
       ? `${added} fotografii sau clipuri noi au fost adăugate.`
@@ -339,4 +512,5 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') refreshGallery();
 });
 $('#filterFav').onclick = () => { onlyFav = !onlyFav; $('#galleryNotice').textContent = ''; render(); };
+if (isSharedAlbum) $('#gate').hidden = true;
 load();
