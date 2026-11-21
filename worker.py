@@ -28,7 +28,7 @@ STATUS_LOCK = threading.Lock()
 IMAGE_EXTENSIONS = re.compile(r"\.(jpe?g|png|webp|tiff?|heic|avif)$", re.IGNORECASE)
 RAW_EXTENSIONS = re.compile(r"\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$", re.IGNORECASE)
 VIDEO_EXTENSIONS = re.compile(r"\.(mp4|mov|mkv|m4v|avi)$", re.IGNORECASE)
-PHOTO_CACHE_VERSION = 3
+PHOTO_CACHE_VERSION = 4
 VIDEO_CACHE_VERSION = 6
 SRGB_PROFILE = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
 SRGB_PROFILE_DATA = SRGB_PROFILE.tobytes()
@@ -194,6 +194,27 @@ def make_png(image_source, target, width):
     return dimensions
 
 
+def make_webp(image_source, target, width, quality=82):
+    target.parent.mkdir(parents=True, exist_ok=True)
+    source = io.BytesIO(image_source) if isinstance(image_source, bytes) else image_source
+    if isinstance(source, Path) and not source.is_file():
+        return None
+    with Image.open(source) as opened:
+        source_profile_data = opened.info.get("icc_profile")
+        image = ImageOps.exif_transpose(opened)
+        if source_profile_data:
+            source_profile = ImageCms.ImageCmsProfile(io.BytesIO(source_profile_data))
+            image = ImageCms.profileToProfile(
+                image, source_profile, SRGB_PROFILE, outputMode="RGB"
+            )
+        else:
+            image = image.convert("RGB")
+        image.thumbnail((width, width), Image.Resampling.LANCZOS)
+        dimensions = image.size
+        image.save(target, "WEBP", quality=quality, method=4)
+    return dimensions
+
+
 def process_media(source, slug, name, kind):
     root = CACHE / slug
     relative_name = Path(*Path(name).parts)
@@ -267,21 +288,29 @@ def process_media(source, slug, name, kind):
     for directory in ("t", "m", "l"):
         legacy = root / directory / relative_name.with_name(f"{relative_name.name}.webp")
         legacy.unlink(missing_ok=True)
+    make_webp(image_source, large.with_suffix(".webp"), 2560, quality=86)
+    make_webp(image_source, medium.with_suffix(".webp"), 1280, quality=84)
+    make_webp(image_source, thumbnail.with_suffix(".webp"), 640, quality=82)
     return {"w": large_width, "h": large_height}
 
 
 def cache_is_complete(root, name, kind):
     relative_name = Path(*Path(name).parts)
-    expected = [
-        root / "t" / relative_name.with_name(f"{relative_name.name}.png"),
-        root / "m" / relative_name.with_name(f"{relative_name.name}.png"),
-        root / "l" / relative_name.with_name(f"{relative_name.name}.png"),
-    ]
+    image_complete = all(
+        (root / directory / relative_name.with_name(f"{relative_name.name}.png")).is_file()
+        and (root / directory / relative_name.with_name(f"{relative_name.name}.png")).stat().st_size > 0
+        for directory in ("t", "m", "l")
+    )
+    if not image_complete:
+        return False
     if kind == "video":
-        expected.append(root / "v" / relative_name.with_name(f"{relative_name.name}.mp4"))
-        expected.append(root / "v360" / relative_name.with_name(f"{relative_name.name}.mp4"))
-        expected.append(root / "v1080" / relative_name.with_name(f"{relative_name.name}.mp4"))
-    return all(file.is_file() and file.stat().st_size > 0 for file in expected)
+        videos = [
+            root / "v" / relative_name.with_name(f"{relative_name.name}.mp4"),
+            root / "v360" / relative_name.with_name(f"{relative_name.name}.mp4"),
+            root / "v1080" / relative_name.with_name(f"{relative_name.name}.mp4"),
+        ]
+        return all(file.is_file() and file.stat().st_size > 0 for file in videos)
+    return True
 
 
 def scan_album(slug, album):

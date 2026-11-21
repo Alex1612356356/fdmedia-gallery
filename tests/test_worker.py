@@ -176,7 +176,8 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(index["items"][0]["photo_version"], worker.PHOTO_CACHE_VERSION)
         with Image.open(root / "l" / "photo.jpg.png") as rendition:
             self.assertEqual(rendition.format, "PNG")
-        self.assertFalse(legacy.exists())
+        with Image.open(root / "l" / "photo.jpg.webp") as rendition:
+            self.assertEqual(rendition.format, "WEBP")
 
     def test_scan_publishes_processed_photos_before_later_media_finishes(self):
         Image.new("RGB", (640, 480), "blue").save(self.media / "event" / "second.jpg")

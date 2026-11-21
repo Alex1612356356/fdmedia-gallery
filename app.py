@@ -1291,7 +1291,7 @@ def create_app(
                     "l": ("m", "t"),
                     "p": ("m", "t"),
                 }[kind]
-                extensions = (".png", ".webp")
+                extensions = (".webp", ".png")
 
             file_path = None
             for rendition_dir in rendition_dirs:
@@ -1330,7 +1330,11 @@ def create_app(
         if name not in share["items"]:
             abort(404)
         response = serve_media(share["source"], kind, name)
-        response.headers["Cache-Control"] = "no-store"
+        response.headers["Cache-Control"] = (
+            "public, max-age=31536000, immutable"
+            if request.args.get("v") and response.headers.get("Cache-Control", "").endswith("immutable")
+            else "no-store"
+        )
         return response
 
     @app.errorhandler(413)

@@ -234,6 +234,9 @@ function render() {
     link.dataset.pswpWidth = it.w; link.dataset.pswpHeight = it.h;
     const image = document.createElement('img');
     image.alt = it.type === 'video' ? `Previzualizare videoclip: ${it.n}` : `Fotografie: ${it.n}`;
+    image.loading = 'lazy';
+    image.decoding = 'async';
+    if (i < 8) image.fetchPriority = 'high';
     image.dataset.src = url('t', it.n, it.m, renditionVersion(it));
     link.append(image);
     card.append(link);
