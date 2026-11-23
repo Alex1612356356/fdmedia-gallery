@@ -4,7 +4,7 @@ const isSharedAlbum = Boolean(shareToken);
 const slug = isSharedAlbum ? null : location.pathname.split('/')[2];
 const $ = s => document.querySelector(s), grid = $('#grid');
 let items = [], favs = new Set(), onlyFav = false, isAdmin = false, sections = [], activeSection = 'all';
-let sortOrder = 'date-desc', creatingShare = false;
+let sortOrder = 'date-asc', creatingShare = false;
 const shareSelections = new Set();
 const shareLink = new URLSearchParams(location.search).get('link');
 let imageObserver;
@@ -510,10 +510,6 @@ async function refreshGallery() {
       : error.message;
   }
 }
-window.setInterval(refreshGallery, 30000);
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') refreshGallery();
-});
 $('#filterFav').onclick = () => { onlyFav = !onlyFav; $('#galleryNotice').textContent = ''; render(); };
 if (isSharedAlbum) $('#gate').hidden = true;
 load();
