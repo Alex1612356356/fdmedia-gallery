@@ -156,6 +156,11 @@ function updateShareControls() {
   if (isSharedAlbum) return;
   $('#shareSelectionCount').textContent = `${shareSelections.size} selectate`;
   $('#createShareAlbum').disabled = creatingShare || shareSelections.size === 0;
+  const allSelected = items.length > 0 && items.every(item => shareSelections.has(item.n));
+  const selectAll = $('#selectAllSharePhotos');
+  selectAll.disabled = creatingShare || items.length === 0;
+  selectAll.textContent = allSelected ? 'Deselectează tot' : 'Selectează tot';
+  selectAll.setAttribute('aria-pressed', String(allSelected));
 }
 function toggleShareSelection(item, button) {
   if (shareSelections.has(item.n)) shareSelections.delete(item.n);
@@ -293,6 +298,7 @@ async function deletePhoto(item, button) {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Nu am putut șterge fotografia.');
     items = items.filter(existing => existing.n !== item.n);
+    shareSelections.delete(item.n);
     favs.delete(item.n);
     $('#galleryNotice').textContent = `Fotografia „${item.n}” a fost ștearsă definitiv.`;
     render();
@@ -455,6 +461,16 @@ $('#createShareAlbum').addEventListener('click', async () => {
     creatingShare = false;
     updateShareControls();
   }
+});
+$('#selectAllSharePhotos').addEventListener('click', () => {
+  const allSelected = items.length > 0 && items.every(item => shareSelections.has(item.n));
+  if (allSelected) {
+    shareSelections.clear();
+  } else {
+    items.forEach(item => shareSelections.add(item.n));
+  }
+  updateShareControls();
+  render();
 });
 $('#sortOrder').addEventListener('change', event => {
   sortOrder = event.currentTarget.value;
