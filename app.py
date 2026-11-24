@@ -9,12 +9,14 @@ import tempfile
 import threading
 import time
 import zipfile
+from io import BytesIO
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 from pathlib import PurePosixPath
 
 from flask import Flask, abort, jsonify, make_response, redirect, request, send_file, send_from_directory
+from PIL import Image
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from cli import ALBUM_THEMES, add_album, decrypt_album_pin
@@ -1316,7 +1318,46 @@ def create_app(
             abort(404)
         if file_path is None or not file_path.is_file():
             abort(404)
-        response = send_file(file_path, conditional=True, as_attachment=kind == "o", download_name=name if kind == "o" else None)
+        download_name = name if kind == "o" else None
+        if kind == "o" and request.args.get("bw") == "1" and item.get("type") != "video":
+            try:
+                with Image.open(file_path) as source:
+                    grayscale = source.convert("L")
+                    output = BytesIO()
+                    source_format = source.format or "JPEG"
+                    if source_format.upper() == "JPEG":
+                        grayscale = grayscale.convert("RGB")
+                        save_format = "JPEG"
+                        mimetype = "image/jpeg"
+                    elif source_format.upper() == "PNG":
+                        save_format = "PNG"
+                        mimetype = "image/png"
+                    elif source_format.upper() == "WEBP":
+                        save_format = "WEBP"
+                        mimetype = "image/webp"
+                    else:
+                        save_format = "PNG"
+                        mimetype = "image/png"
+                    grayscale.save(output, format=save_format)
+                output.seek(0)
+                stem = Path(name).stem
+                download_suffix = {
+                    "JPEG": ".jpg",
+                    "PNG": ".png",
+                    "WEBP": ".webp",
+                }[save_format]
+                download_name = f"{stem}-alb-negru{download_suffix}"
+                response = send_file(
+                    output,
+                    mimetype=mimetype,
+                    conditional=False,
+                    as_attachment=True,
+                    download_name=download_name,
+                )
+            except (OSError, ValueError):
+                abort(415)
+        else:
+            response = send_file(file_path, conditional=True, as_attachment=kind == "o", download_name=download_name)
         response.headers["Cache-Control"] = (
             "private, no-store"
             if kind == "o" or used_fallback or not request.args.get("v")

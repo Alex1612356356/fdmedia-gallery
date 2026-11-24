@@ -6,6 +6,7 @@ const $ = s => document.querySelector(s), grid = $('#grid');
 let items = [], favs = new Set(), onlyFav = false, isAdmin = false, sections = [], activeSection = 'all';
 let sortOrder = 'date-asc', creatingShare = false;
 const shareSelections = new Set();
+const grayscaleSelections = new Set();
 const shareLink = new URLSearchParams(location.search).get('link');
 let imageObserver;
 const PHOTO_RENDITION = 'l';
@@ -20,12 +21,16 @@ const api = (p, o = {}) => {
   if (shareLink) endpoint.searchParams.set('link', shareLink);
   return fetch(endpoint, { credentials: 'same-origin', cache: 'no-store', ...o });
 };
-const url = (k, n, m, version) => {
+const url = (k, n, m, version, blackAndWhite = false) => {
   const cacheKey = [m, version].filter(value => value !== undefined && value !== null).join('-');
   const path = isSharedAlbum
     ? `/sm/${encodeURIComponent(shareToken)}/${k}/${encodeURIComponent(n)}`
     : `/m/${slug}/${k}/${encodeURIComponent(n)}`;
-  return `${path}${cacheKey ? `?v=${encodeURIComponent(cacheKey)}` : ''}`;
+  const params = new URLSearchParams();
+  if (cacheKey) params.set('v', cacheKey);
+  if (blackAndWhite) params.set('bw', '1');
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
 };
 const renditionVersion = item => item.type === 'video' ? item.video_version : item.photo_version;
 
@@ -350,14 +355,43 @@ function initLightbox() {
     secondaryZoomLevel: 1, maxZoomLevel: 3, bgOpacity: 1, wheelToZoom: true, preload: [1, 2],
   });
   const cur = () => visible()[lb.pswp.currIndex];
+  const updateGrayscale = el => {
+    const item = cur();
+    const enabled = item?.type !== 'video' && grayscaleSelections.has(item?.n);
+    lb.pswp.element?.classList.toggle('pswp--grayscale', enabled);
+    el.classList.toggle('on', enabled);
+    el.hidden = item?.type === 'video';
+  };
   lb.on('uiRegister', () => {
     if (!isSharedAlbum) {
       lb.pswp.ui.registerElement({ name: 'fav', order: 8, isButton: true, html: '♥', title: 'Favorit',
         onClick: (e, el) => { toggle(cur().n); setTimeout(() => el.classList.toggle('on', favs.has(cur().n))); },
         onInit: (el, pswp) => pswp.on('change', () => el.classList.toggle('on', favs.has(cur().n))) });
     }
+    lb.pswp.ui.registerElement({ name: 'bw', order: 8.5, isButton: true, html: '◐', title: 'Alb-negru',
+      onClick: (e, el) => {
+        const item = cur();
+        if (!item || item.type === 'video') return;
+        grayscaleSelections.has(item.n) ? grayscaleSelections.delete(item.n) : grayscaleSelections.add(item.n);
+        updateGrayscale(el);
+      },
+      onInit: (el, pswp) => pswp.on('change', () => updateGrayscale(el)) });
     lb.pswp.ui.registerElement({ name: 'dl', order: 9, isButton: true, html: '⬇', title: 'Descarcă original',
-      onClick: () => { const a = document.createElement('a'); a.href = url('o', cur().n, cur().m); a.download = cur().n; a.click(); } });
+      onClick: () => {
+        const item = cur();
+        const bw = item?.type !== 'video' && grayscaleSelections.has(item?.n);
+        const a = document.createElement('a');
+        a.href = url('o', item.n, item.m, undefined, bw);
+        if (bw) {
+          const dot = item.n.lastIndexOf('.');
+          a.download = dot > 0
+            ? `${item.n.slice(0, dot)}-alb-negru${item.n.slice(dot)}`
+            : `${item.n}-alb-negru`;
+        } else {
+          a.download = item.n;
+        }
+        a.click();
+      } });
   });
   // Video slides
   lb.addFilter('itemData', d => { const it = visible()[+d.element?.dataset.i]; if (it?.type === 'video')

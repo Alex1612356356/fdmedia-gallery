@@ -6,6 +6,7 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
+from PIL import Image
 
 os.environ.setdefault("SECRET", "test-only-secret-used-for-module-initialization")
 
@@ -146,6 +147,22 @@ class GalleryAppTests(unittest.TestCase):
                     json={"title": "Selecție", "items": names},
                 )
                 self.assertEqual(response.status_code, 400)
+
+    def test_original_download_can_be_converted_to_black_and_white(self):
+        source = self.media / "event" / "photo one.jpg"
+        Image.new("RGB", (20, 10), (220, 40, 10)).save(source, format="JPEG")
+        self.client.post("/api/event-one/login", json={"pin": "12345678"})
+
+        response = self.client.get("/m/event-one/o/photo%20one.jpg?bw=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("photo one-alb-negru.jpg", response.headers["Content-Disposition"])
+        with Image.open(BytesIO(response.data)) as downloaded:
+            self.assertEqual(downloaded.mode, "RGB")
+            pixel = downloaded.convert("RGB").getpixel((0, 0))
+            self.assertEqual(pixel[0], pixel[1])
+            self.assertEqual(pixel[1], pixel[2])
+        response.close()
 
     def test_gallery_serves_selectable_photo_and_video_renditions(self):
         index_path = self.cache / "event-one" / "index.json"
